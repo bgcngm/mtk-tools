@@ -1,10 +1,13 @@
 #!/usr/bin/perl -W
 
+#
 # script from Android-DLS WiKi
 #
 # changes by Bruno Martins:
 #   - modified to work with MT6516 boot and recovery images (17-03-2011)
 #   - included support for MT65x3 and eliminated the need of header files (16-10-2011)
+#   - added cygwin mkbootimg binary and propper fix (17-05-2012)
+#
 
 use strict;
 use Cwd;
@@ -63,7 +66,11 @@ print RAMDISKFILE $newramdisk or die;
 close RAMDISKFILE;
 
 # create the outfile
-system ("mkbootimg --kernel $kernel --ramdisk new-ramdisk-repack.cpio.gz -o $outfile");
+if ( $^O eq "cygwin" ) {
+	system ("./mkbootimg.exe --kernel $kernel --ramdisk new-ramdisk-repack.cpio.gz -o $outfile");
+} else {
+	system ("mkbootimg --kernel $kernel --ramdisk new-ramdisk-repack.cpio.gz -o $outfile");
+}
 
 # cleanup
 unlink("ramdisk-repack.cpio.gz") or die $!;
