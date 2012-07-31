@@ -1,13 +1,16 @@
 #!/usr/bin/perl -W
 
 # script from Android-DLS WiKi
-# modified for MT6516 by Bruno Martins
+#
+# changes by Bruno Martins:
+#   - modified to work with MT6516 boot and recovery images (17-03-2011)
+#   - included support for MT65x3 and eliminated the need of header files (16-10-2011)
 
 use strict;
 use bytes;
 use File::Path;
 
-my $usage = "repack-bootimg.pl <boot image>\n";
+my $usage = "unpack-MT65xx.pl <image>\n";
 
 die "\nUsage:\n\n$usage" unless $ARGV[0];
 
@@ -38,28 +41,17 @@ my($ram1Addr) = (1 + $kernelSizeInPages) * $pageSize;
 
 my($ram1) = substr($bootimg, $ram1Addr, $ram1Size);
 
-# get the ramdisk header (rootfs signature for boot images / recovery signature for recovery images)
-my($ramdiskheader) = substr($ram1, 0, 512);
-
-open (HEADERFILE, ">$ARGV[0]-ramdisk.header");
-binmode(HEADERFILE);
-print HEADERFILE $ramdiskheader or die;
-close HEADERFILE;
-
-print "\nramdisk header written to $ARGV[0]-ramdisk.header\n";
-
 # chop ramdisk header
 $ram1 = substr($ram1, 512);
 
-if (substr($ram1, 0, 2) ne "\x1F\x8B")
-{
-        die "the boot image does not appear to contain a valid gzip file";
+if (substr($ram1, 0, 2) ne "\x1F\x8B") {
+	die "the boot image does not appear to contain a valid gzip file";
 }
 
-open (RAM1FILE, ">$ARGV[0]-ramdisk.cpio.gz");
-binmode(RAM1FILE);
-print RAM1FILE $ram1 or die;
-close RAM1FILE;
+open (RAMDISKFILE, ">$ARGV[0]-ramdisk.cpio.gz");
+binmode(RAMDISKFILE);
+print RAMDISKFILE $ram1 or die;
+close RAMDISKFILE;
 
 print "\nramdisk written to $ARGV[0]-ramdisk.cpio.gz\n";
 
