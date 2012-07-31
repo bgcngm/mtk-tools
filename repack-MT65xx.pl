@@ -116,6 +116,8 @@ sub repack_logo {
 		$i++;
 	}
 	die "Could not find any .rgb565 file under the specified folder: $logodir\n" unless $i > 0;
+
+	chdir $dir or die "\n$logodir $!";;
 	
 	$/ = $slurpvar;
 	my $num_blocks = $i;
@@ -150,7 +152,7 @@ sub repack_logo {
 	$logobin = $logo_header . $logobin;
 
 	# create the output file
-	open (RAWFILE, ">../$outfile");
+	open (RAWFILE, ">$outfile");
 	binmode(RAWFILE);
 	print RAWFILE $logobin or die;
 	close RAWFILE;
