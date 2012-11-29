@@ -85,7 +85,7 @@ sub unpack_boot {
 
 	mkdir "$ARGV[0]-ramdisk" or die;
 	chdir "$ARGV[0]-ramdisk" or die;
-	die "\nError: cpio not found!\n" unless ( -e "/usr/bin/cpio") || ( -e "/usr/local/bin/cpio") || ( -e "/binn/cpio") ; 
+	die "\nError: cpio not found!\n" unless ( -e "/usr/bin/cpio") || ( -e "/usr/local/bin/cpio") || ( -e "/bin/cpio") ; 
 	print "Ramdisk size: ";
 	system ("gzip -d -c ../$ARGV[0]-ramdisk.cpio.gz | cpio -i");
 
