@@ -14,7 +14,6 @@
 use strict;
 use warnings;
 use Cwd;
-use Switch;
 use Compress::Zlib;
 
 my $dir = getcwd;
@@ -25,22 +24,17 @@ my $usage = "repack-MT65xx.pl COMMAND [...]\n\nCOMMANDs are:\n\n  -boot <kernel>
 print "$version";
 die "\nUsage: $usage" unless $ARGV[0] && $ARGV[1] && $ARGV[2];
 
-switch($ARGV[0]) {
-	case "-boot" {
-		die "\nUsage: $usage" unless $ARGV[3] && !$ARGV[4];
-		repack_boot("ROOTFS");
-	}
-	case "-recovery" {
-		die "\nUsage: $usage" unless $ARGV[3] && !$ARGV[4];
-		repack_boot("RECOVERY");
-	}
-	case "-logo" {
-		die "\nUsage: $usage" unless !$ARGV[3];
-		repack_logo("LOGO");
-	}
-	else {
-		die "\nUsage: $usage";
-	}
+if ( $ARGV[0] eq "-boot" ) {
+	die "\nUsage: $usage" unless $ARGV[3] && !$ARGV[4];
+	repack_boot("ROOTFS");
+} elsif ( $ARGV[0] eq "-recovery" ) {
+	die "\nUsage: $usage" unless $ARGV[3] && !$ARGV[4];
+	repack_boot("RECOVERY");
+} elsif ( $ARGV[0] eq "-logo" ) {
+	die "\nUsage: $usage" unless !$ARGV[3];
+	repack_logo("LOGO");
+} else {
+	die "\nUsage: $usage";
 }
 
 sub repack_boot {
