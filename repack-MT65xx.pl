@@ -8,6 +8,7 @@
 #   - included support for MT65x3 and eliminated the need of header files (16-10-2011)
 #   - added cygwin mkbootimg binary and propper fix (17-05-2012)
 #   - included support for MT65xx logo images (31-07-2012)
+#   - fixed problem unpacking logo images containing more than nine packed rgb565 raw files (29-11-2012)
 #
 
 use strict;
@@ -18,7 +19,7 @@ use Compress::Zlib;
 
 my $dir = getcwd;
 
-my $version = "MTK-Tools by Bruno Martins\nMT65xx repack script (last update: 31-07-2012)\n";
+my $version = "MTK-Tools by Bruno Martins\nMT65xx repack script (last update: 29-11-2012)\n";
 my $usage = "repack-MT65xx.pl COMMAND [...]\n\nCOMMANDs are:\n\n  -boot <kernel> <ramdisk-directory> <outfile>\n    Repacks boot image\n\n  -recovery <kernel> <ramdisk-directory> <outfile>\n    Repacks recovery image\n\n  -logo <logo-directory> <outfile>\n    Repacks logo image\n\n";
 
 print "$version";
@@ -38,7 +39,7 @@ switch($ARGV[0]) {
 		repack_logo("LOGO");
 	}
 	else {
-		die "\nUsage: $usage"
+		die "\nUsage: $usage";
 	}
 }
 
@@ -59,7 +60,7 @@ sub repack_boot {
 
 	my $slurpvar = $/;
 	undef $/;
-	open (RAMDISKFILE, "ramdisk-repack.cpio.gz") or die "Could not open ramdisk file: ramdisk-repack.cpio.gz\n";
+	open (RAMDISKFILE, "ramdisk-repack.cpio.gz") or die "Error: could not open ramdisk file: ramdisk-repack.cpio.gz\n";
 	my $ramdisk = <RAMDISKFILE>;
 	close RAMDISKFILE;
 	$/ = $slurpvar;
@@ -106,7 +107,7 @@ sub repack_logo {
 	my $slurpvar = $/;
 	undef $/;
 	for my $inputfile ( glob "./*.rgb565" ) {
-		open (INPUTFILE, "$inputfile") or die "Could not open raw image: $inputfile\n";
+		open (INPUTFILE, "$inputfile") or die "Error: could not open raw image: $inputfile\n";
 		$input = <INPUTFILE>;
 		close INPUTFILE;
 
@@ -115,7 +116,7 @@ sub repack_logo {
 
 		$i++;
 	}
-	die "Could not find any .rgb565 file under the specified folder: $logodir\n" unless $i > 0;
+	die "Error: could not find any .rgb565 file under the specified folder: $logodir\n" unless $i > 0;
 
 	chdir $dir or die "\n$logodir $!";;
 	

@@ -8,6 +8,7 @@
 #   - included support for MT65x3 and eliminated the need of header files (16-10-2011)
 #   - added cygwin mkbootimg binary and propper fix (17-05-2012)
 #   - included support for MT65xx logo images (31-07-2012)
+#   - fixed problem unpacking logo images containing more than nine packed rgb565 raw files (29-11-2012)
 #
 
 use strict;
@@ -16,7 +17,7 @@ use bytes;
 use File::Path;
 use Compress::Zlib;
 
-my $version = "MTK-Tools by Bruno Martins\nMT65xx unpack script (last update: 31-07-2012)\n";
+my $version = "MTK-Tools by Bruno Martins\nMT65xx unpack script (last update: 29-11-2012)\n";
 my $usage = "unpack-MT65xx.pl <infile>\n  Unpacks boot, recovery or logo image\n\n";
 
 print "$version";
@@ -26,7 +27,7 @@ my $inputfile = $ARGV[0];
 
 my $slurpvar = $/;
 undef $/;
-open (INPUTFILE, "$inputfile") or die "\nCould not open the specified file: $inputfile\n";
+open (INPUTFILE, "$inputfile") or die "\nError: could not open the specified file: $inputfile\n";
 my $input = <INPUTFILE>;
 close INPUTFILE;
 $/ = $slurpvar;
@@ -40,7 +41,7 @@ if ((substr($input, 0, 4) eq "\x88\x16\x88\x58") & (substr($input, 8, 4) eq "LOG
 	print "\nValid Android signature found...\n";
 	unpack_boot($input);
 } else {
-	die "\nThe input file does not appear to be a valid file.";
+	die "\nError: the input file does not appear to be a valid file.";
 }
 
 sub unpack_boot {
@@ -67,7 +68,7 @@ sub unpack_boot {
 	$ram1 = substr($ram1, 512);
 
 	if (substr($ram1, 0, 2) ne "\x1F\x8B") {
-		die "\nThe boot image does not appear to contain a valid gzip file";
+		die "\nError: the boot image does not appear to contain a valid gzip file";
 	}
 
 	open (RAMDISKFILE, ">$ARGV[0]-ramdisk.cpio.gz");
@@ -84,6 +85,7 @@ sub unpack_boot {
 
 	mkdir "$ARGV[0]-ramdisk" or die;
 	chdir "$ARGV[0]-ramdisk" or die;
+	die "\nError: cpio not found!\n" unless ( -e "/usr/bin/cpio") || ( -e "/usr/local/bin/cpio") || ( -e "/binn/cpio") ; 
 	print "Ramdisk size: ";
 	system ("gzip -d -c ../$ARGV[0]-ramdisk.cpio.gz | cpio -i");
 
@@ -100,7 +102,7 @@ sub unpack_logo {
 	# just one more check to make sure that the logo image is valid
 	my $sizelogobin = -s $inputfile;
 	if ($logo_length != $sizelogobin - 512) {
-		die "The logo image does not appear to be valid.";
+		die "Error: the logo image does not appear to be valid.";
 	}
 
 	# chop the header and extract logo information
@@ -117,6 +119,7 @@ sub unpack_logo {
 	} while $i < $num_blocks;
 
 	$i = 0;
+	my $num;
 	# extract rgb565 raw files (uncompress zlib rfc1950)
 	do {
 		if ($i < $num_blocks-1) {
@@ -124,11 +127,12 @@ sub unpack_logo {
 		} else {
 			$zlib_raw[$i] = substr($logo, $raw_addr[$i]);
 		}
-		open (RAWFILE, ">$ARGV[0]-raw[$i].rgb565");
+		$num = sprintf ("%02d",$i);
+		open (RAWFILE, ">$ARGV[0]-raw[$num].rgb565");
 		binmode(RAWFILE);
 		print RAWFILE uncompress($zlib_raw[$i]) or die;
 		close RAWFILE;
-		print "Raw image #$i written to $ARGV[0]-raw[$i].rgb565\n";
+		print "Raw image #$i written to $ARGV[0]-raw[$num].rgb565\n";
 
 		$i++;
 	} while $i < $num_blocks;
