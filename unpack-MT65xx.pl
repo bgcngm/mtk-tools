@@ -9,6 +9,7 @@
 #   - added cygwin mkbootimg binary and propper fix (17-05-2012)
 #   - included support for MT65xx logo images (31-07-2012)
 #   - fixed problem unpacking logo images containing more than nine packed rgb565 raw files (29-11-2012)
+#   - re-written logo images file verification (29-12-2012)
 #
 
 use strict;
@@ -17,7 +18,7 @@ use bytes;
 use File::Path;
 use Compress::Zlib;
 
-my $version = "MTK-Tools by Bruno Martins\nMT65xx unpack script (last update: 29-11-2012)\n";
+my $version = "MTK-Tools by Bruno Martins\nMT65xx unpack script (last update: 29-12-2012)\n";
 my $usage = "unpack-MT65xx.pl <infile>\n  Unpacks boot, recovery or logo image\n\n";
 
 print "$version";
@@ -99,10 +100,11 @@ sub unpack_logo {
 	my $header = substr($logobin, 0, 512);
 	my ($header_sig, $logo_length, $logo_sig) = unpack('a4 V A4', $header);
 
-	# just one more check to make sure that the logo image is valid
+	# throw a warning if logo file size is not what is expected
+	# (it may happen if logo image was created with a backup tool and contains trailing zeros)
 	my $sizelogobin = -s $inputfile;
 	if ($logo_length != $sizelogobin - 512) {
-		die "Error: the logo image does not appear to be valid.";
+		print "Warning: unexpected logo image file size! Trying to unpack it anyway...\n";
 	}
 
 	# chop the header and extract logo information

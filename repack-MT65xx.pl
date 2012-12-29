@@ -9,6 +9,7 @@
 #   - added cygwin mkbootimg binary and propper fix (17-05-2012)
 #   - included support for MT65xx logo images (31-07-2012)
 #   - fixed problem unpacking logo images containing more than nine packed rgb565 raw files (29-11-2012)
+#   - re-written logo images file verification (29-12-2012)
 #
 
 use strict;
@@ -18,7 +19,7 @@ use Compress::Zlib;
 
 my $dir = getcwd;
 
-my $version = "MTK-Tools by Bruno Martins\nMT65xx repack script (last update: 29-11-2012)\n";
+my $version = "MTK-Tools by Bruno Martins\nMT65xx repack script (last update: 29-12-2012)\n";
 my $usage = "repack-MT65xx.pl COMMAND [...]\n\nCOMMANDs are:\n\n  -boot <kernel> <ramdisk-directory> <outfile>\n    Repacks boot image\n\n  -recovery <kernel> <ramdisk-directory> <outfile>\n    Repacks recovery image\n\n  -logo <logo-directory> <outfile>\n    Repacks logo image\n\n";
 
 print "$version";
