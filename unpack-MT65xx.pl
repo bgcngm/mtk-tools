@@ -140,6 +140,16 @@ sub unpack_logo {
 
 	$i = 0;
 	my $num;
+
+	if (-e "$ARGV[0]-unpacked") {
+		rmtree "$ARGV[0]-unpacked";
+		print "Removed old unpacked logo directory $ARGV[0]-unpacked\n";
+	}
+
+	mkdir "$ARGV[0]-unpacked" or die;
+	chdir "$ARGV[0]-unpacked" or die;
+	print "Extracting raw images to directory $ARGV[0]-unpacked\n";
+
 	# extract rgb565 raw files (uncompress zlib rfc1950)
 	do {
 		if ($i < $num_blocks-1) {
