@@ -10,6 +10,7 @@
 #   - included support for MT65xx logo images (31-07-2012)
 #   - fixed problem unpacking logo images containing more than nine packed rgb565 raw files (29-11-2012)
 #   - re-written logo images file verification (29-12-2012)
+#   - image resolution is now calculated and shown when unpacking logo images (02-01-2013)
 #
 
 use strict;
@@ -18,7 +19,7 @@ use bytes;
 use File::Path;
 use Compress::Zlib;
 
-my $version = "MTK-Tools by Bruno Martins\nMT65xx unpack script (last update: 29-12-2012)\n";
+my $version = "MTK-Tools by Bruno Martins\nMT65xx unpack script (last update: 02-01-2013)\n";
 my $usage = "unpack-MT65xx.pl <infile>\n  Unpacks boot, recovery or logo image\n\n";
 
 print "$version";
@@ -95,6 +96,19 @@ sub unpack_boot {
 }
 
 sub unpack_logo {
+    my @resolution = ([1080,1920,"FHD"],
+		      [720,1280,"HD"],
+		      [600,1024,"WSVGA"],
+		      [540,960,"qHD"],
+		      [480,854,"FWVGA"],
+		      [480,800,"WVGA"],
+		      [320,480,"HVGA"],
+		      [240,320,"QVGA"],
+		      [38,54,"N/A"],
+		      [48,54,"N/A"],
+		      [135,24,"N/A"],
+		      [135,1,"N/A"]);
+
     my $logobin = $_[0];
 	# get logo header
 	my $header = substr($logobin, 0, 512);
@@ -110,8 +124,12 @@ sub unpack_logo {
 	# chop the header and extract logo information
 	my $logo = substr($logobin, 512);
 	my $num_blocks = unpack('V', $logo);
+	if ( ! $num_blocks ) {
+		die "\nError: no zlib packed rgb565 images were found\n";
+	}
 
 	my $i = 0;
+	my $j = 0;
 	my (@raw_addr, @zlib_raw) = ();
 	print "\nNumber of raw images found: $num_blocks\n";
 	# get the starting address of each raw file
@@ -135,6 +153,17 @@ sub unpack_logo {
 		print RAWFILE uncompress($zlib_raw[$i]) or die;
 		close RAWFILE;
 		print "Raw image #$i written to $ARGV[0]-raw[$num].rgb565\n";
+		# calculate rgb565 image resolution
+		while ( $j <= $#resolution ) {
+			last if ((length (uncompress($zlib_raw[$i])) / 2) == ($resolution[$j][0] * $resolution[$j][1]));
+			$j++;
+		}
+		if ( $j <= $#resolution ) {
+			print "  Image resolution: $resolution[$j][0]x$resolution[$j][1] ($resolution[$j][2])\n";
+		} else {
+			print "  Image resolution: unknown\n";
+		}
+		$j = 0;
 
 		$i++;
 	} while $i < $num_blocks;
