@@ -98,18 +98,24 @@ sub unpack_boot {
 }
 
 sub unpack_logo {
-	my @resolution = ([1080,1920,"FHD"],
-			  [720,1280,"HD"],
-			  [600,1024,"WSVGA"],
-			  [540,960,"qHD"],
-			  [480,854,"FWVGA"],
-			  [480,800,"WVGA"],
-			  [320,480,"HVGA"],
-			  [240,320,"QVGA"],
-			  [38,54,"N/A"],
-			  [48,54,"N/A"],
-			  [135,24,"N/A"],
-			  [135,1,"N/A"]);
+	my @resolution = (
+		# HD (High-Definition)
+		[360,640,"(nHD)"], [540,960,"(qHD)"], [720,1280,"(HD)"], [1080,1920,"(FHD)"],
+		[1440,2560,"(WQHD)"], [2160,3840,"(QFHD)"], [4320,7680,"(UHD)"], 
+		# VGA (Video Graphics Array)
+		[120,160,"(QQVGA)"], [160,240,"(HQVGA)"], [240,320,"(QVGA)"],
+		[240,400,"(WQVGA)"], [320,480,"(HVGA)"], [480,640,"(VGA)"],
+		[480,800,"(WVGA)"], [480,854,"(FWVGA)"], [600,800,"(SVGA)"],
+		[640,960,"(DVGA)"], [576,1024,"(WSVGA)"], [600,1024,"(WSVGA)"],
+		# XGA (Extended Graphics Array)
+		[768,1024,"(XGA)"], [768,1280,"(WXGA)"], [864,1152,"(XGA+)"],
+		[900,1440,"(WXGA+)"], [1024,1280,"(SXGA)"], [1050,1400,"(SXGA+)"],
+		[1050,1680,"(WSXGA+)"], [1200,1600,"(UXGA)"], [1200,1920,"(WUXGA)"], 
+		# Quad XGA (Quad Extended Graphics Array)
+		[1152,2048,"(QWXGA)"], [1536,2048,"(QXGA)"], [1600,2560,"(WQXGA)"],
+		[2048,2560,"(QSXGA)"], [2048,3200,"(WQSXGA)"], [2400,3200,"(QUXGA)"], [2400,3840,"(WQUXGA)"],
+		# Others
+		[38,54,""], [48,54,""], [135,24,""], [135,1,""]	);
 
 	my $logobin = $_[0];
 	# get logo header
@@ -152,6 +158,7 @@ sub unpack_logo {
 	chdir "$ARGV[0]-unpacked" or die;
 	print "Extracting raw images to directory '$ARGV[0]-unpacked'\n";
 
+	my $raw_num_pixels;
 	# extract rgb565 raw files (uncompress zlib rfc1950)
 	do {
 		if ($i < $num_blocks-1) {
@@ -166,12 +173,13 @@ sub unpack_logo {
 		close RAWFILE;
 		print "Raw image #$i written to '$ARGV[0]-raw[$num].rgb565'\n";
 		# calculate rgb565 image resolution
+		$raw_num_pixels = length (uncompress($zlib_raw[$i])) / 2;
 		while ( $j <= $#resolution ) {
-			last if ((length (uncompress($zlib_raw[$i])) / 2) == ($resolution[$j][0] * $resolution[$j][1]));
+			last if ( $raw_num_pixels == ($resolution[$j][0] * $resolution[$j][1]) );
 			$j++;
 		}
 		if ( $j <= $#resolution ) {
-			print "  Image resolution: $resolution[$j][0]x$resolution[$j][1] ($resolution[$j][2])\n";
+			print "  Image resolution (width x height): $resolution[$j][0] x $resolution[$j][1] $resolution[$j][2]\n";
 		} else {
 			print "  Image resolution: unknown\n";
 		}
