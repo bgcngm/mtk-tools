@@ -8,34 +8,34 @@
 #   - included support for MT65x3 and eliminated the need of header files (16-10-2011)
 #   - added cygwin mkbootimg binary and propper fix (17-05-2012)
 #   - included support for MT65xx logo images (31-07-2012)
-#   - fixed problem unpacking logo images containing more than nine packed rgb565 raw files (29-11-2012)
-#   - re-written logo images file verification (29-12-2012)
+#   - added colored screen output (04-01-2013)
 #
 
 use strict;
 use warnings;
 use Cwd;
 use Compress::Zlib;
+use Term::ANSIColor;
 
 my $dir = getcwd;
 
-my $version = "MTK-Tools by Bruno Martins\nMT65xx repack script (last update: 29-12-2012)\n";
+my $version = "MTK-Tools by Bruno Martins\nMT65xx repack script (last update: 04-01-2013)\n";
 my $usage = "repack-MT65xx.pl COMMAND [...]\n\nCOMMANDs are:\n\n  -boot <kernel> <ramdisk-directory> <outfile>\n    Repacks boot image\n\n  -recovery <kernel> <ramdisk-directory> <outfile>\n    Repacks recovery image\n\n  -logo <logo-directory> <outfile>\n    Repacks logo image\n\n";
 
-print "$version";
-die "\nUsage: $usage" unless $ARGV[0] && $ARGV[1] && $ARGV[2];
+print colored ("$version", 'bold blue') . "\n";
+die "Usage: $usage" unless $ARGV[0] && $ARGV[1] && $ARGV[2];
 
 if ( $ARGV[0] eq "-boot" ) {
-	die "\nUsage: $usage" unless $ARGV[3] && !$ARGV[4];
+	die "Usage: $usage" unless $ARGV[3] && !$ARGV[4];
 	repack_boot("ROOTFS");
 } elsif ( $ARGV[0] eq "-recovery" ) {
-	die "\nUsage: $usage" unless $ARGV[3] && !$ARGV[4];
+	die "Usage: $usage" unless $ARGV[3] && !$ARGV[4];
 	repack_boot("RECOVERY");
 } elsif ( $ARGV[0] eq "-logo" ) {
-	die "\nUsage: $usage" unless !$ARGV[3];
+	die "Usage: $usage" unless !$ARGV[3];
 	repack_logo("LOGO");
 } else {
-	die "\nUsage: $usage";
+	die "Usage: $usage";
 }
 
 sub repack_boot {
@@ -46,16 +46,19 @@ sub repack_boot {
 	my $signature = $_[0];
 	$ARGV[0] =~ s/-//;
 	
-	chdir $ramdiskdir or die "\n$ramdiskdir $!";
+	die colored ("Error: file '$kernel' not found", 'red') . "\n" unless ( -e $kernel );
+	chdir $ramdiskdir or die colored ("Error: directory '$ramdiskdir' not found", 'red') . "\n";
 
-	print "\nRepacking $ARGV[0] image...\nRamdisk size: ";
+	die colored ("Error: cpio not found!", 'red') . "\n"
+		unless ( -e "/usr/bin/cpio" ) || ( -e "/usr/local/bin/cpio" ) || ( -e "/bin/cpio" ) ;
+	print "Repacking $ARGV[0] image...\nRamdisk size: ";
 	system ("find . | cpio -o -H newc | gzip > $dir/ramdisk-repack.cpio.gz");
 
 	chdir $dir or die "\n$ramdiskdir $!";;
 
 	my $slurpvar = $/;
 	undef $/;
-	open (RAMDISKFILE, "ramdisk-repack.cpio.gz") or die "Error: could not open ramdisk file: ramdisk-repack.cpio.gz\n";
+	open (RAMDISKFILE, "ramdisk-repack.cpio.gz") or die colored ("Error: could not open ramdisk file 'ramdisk-repack.cpio.gz'", 'red') . "\n";
 	my $ramdisk = <RAMDISKFILE>;
 	close RAMDISKFILE;
 	$/ = $slurpvar;
@@ -82,7 +85,7 @@ sub repack_boot {
 	unlink("ramdisk-repack.cpio.gz") or die $!;
 	system("rm new-ramdisk-repack.cpio.gz");
 
-	print "\nRepacked $ARGV[0] image into $outfile\n";
+	print "\nRepacked $ARGV[0] image into '$outfile'\n";
 }
 
 sub repack_logo {
@@ -93,16 +96,15 @@ sub repack_logo {
 	my $signature = $_[0];
 	$ARGV[0] =~ s/-//;
 	
-	chdir $logodir or die "\n$logodir $!";
+	chdir $logodir or die colored ("Error: directory '$logodir' not found", 'red') . "\n";
 
 	my (@raw_addr, @zlib_raw) = ();
-	print "\nRepacking $ARGV[0] image...\n";
 
 	my $i = 0;
 	my $slurpvar = $/;
 	undef $/;
 	for my $inputfile ( glob "./*.rgb565" ) {
-		open (INPUTFILE, "$inputfile") or die "Error: could not open raw image: $inputfile\n";
+		open (INPUTFILE, "$inputfile") or die colored ("Error: could not open raw image '$inputfile'", 'red') . "\n";
 		$input = <INPUTFILE>;
 		close INPUTFILE;
 
@@ -111,7 +113,8 @@ sub repack_logo {
 
 		$i++;
 	}
-	die "Error: could not find any .rgb565 file under the specified folder: $logodir\n" unless $i > 0;
+	die colored ("Error: could not find any .rgb565 file under the specified directory '$logodir'", 'red') . "\n" unless $i > 0;
+	print "Repacking $ARGV[0] image...\n";
 
 	chdir $dir or die "\n$logodir $!";;
 	
@@ -153,7 +156,7 @@ sub repack_logo {
 	print RAWFILE $logobin or die;
 	close RAWFILE;
 
-	print "\nRepacked $ARGV[0] image into $outfile\n";
+	print "\nRepacked $ARGV[0] image into '$outfile'\n";
 }
 
 sub gen_header {
