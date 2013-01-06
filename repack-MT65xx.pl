@@ -9,6 +9,7 @@
 #   - added cygwin mkbootimg binary and propper fix (17-05-2012)
 #   - included support for MT65xx logo images (31-07-2012)
 #   - added colored screen output (04-01-2013)
+#   - includded support for logo images containing uncompressed raw files (06-01-2013)
 #
 
 use strict;
@@ -19,8 +20,8 @@ use Term::ANSIColor;
 
 my $dir = getcwd;
 
-my $version = "MTK-Tools by Bruno Martins\nMT65xx repack script (last update: 04-01-2013)\n";
-my $usage = "repack-MT65xx.pl COMMAND [...]\n\nCOMMANDs are:\n\n  -boot <kernel> <ramdisk-directory> <outfile>\n    Repacks boot image\n\n  -recovery <kernel> <ramdisk-directory> <outfile>\n    Repacks recovery image\n\n  -logo <logo-directory> <outfile>\n    Repacks logo image\n\n";
+my $version = "MTK-Tools by Bruno Martins\nMT65xx repack script (last update: 06-01-2013)\n";
+my $usage = "repack-MT65xx.pl COMMAND [...]\n\nCOMMANDs are:\n\n  -boot <kernel> <ramdisk-directory> <outfile>\n    Repacks boot image\n\n  -recovery <kernel> <ramdisk-directory> <outfile>\n    Repacks recovery image\n\n  -logo [--no_compression] <logo-directory> <outfile>\n    Repacks logo image\n\n";
 
 print colored ("$version", 'bold blue') . "\n";
 die "Usage: $usage" unless $ARGV[0] && $ARGV[1] && $ARGV[2];
@@ -32,8 +33,14 @@ if ( $ARGV[0] eq "-boot" ) {
 	die "Usage: $usage" unless $ARGV[3] && !$ARGV[4];
 	repack_boot("RECOVERY");
 } elsif ( $ARGV[0] eq "-logo" ) {
-	die "Usage: $usage" unless !$ARGV[3];
-	repack_logo("LOGO");
+	if ( $ARGV[1] eq "--no_compression" ) {
+		die "Usage: $usage" unless $ARGV[2] && $ARGV[3] && !$ARGV[4];
+		repack_logo_uncompressed("LOGO");
+	}
+	else {
+		die "Usage: $usage" unless !$ARGV[3];
+		repack_logo("LOGO");
+	}
 } else {
 	die "Usage: $usage";
 }
@@ -148,6 +155,56 @@ sub repack_logo {
 		$i++;
 	} while $i < $num_blocks;
 
+	$logobin = $logo_header . $logobin;
+
+	# create the output file
+	open (RAWFILE, ">$outfile");
+	binmode(RAWFILE);
+	print RAWFILE $logobin or die;
+	close RAWFILE;
+
+	print "\nRepacked $ARGV[0] image into '$outfile'\n";
+}
+
+sub repack_logo_uncompressed {
+	# initilization
+	my @raw;
+	my $logodir = $ARGV[2];
+	my $outfile = $ARGV[3];
+	my $signature = $_[0];
+	$ARGV[0] =~ s/-//;
+	
+	chdir $logodir or die colored ("Error: directory '$logodir' not found", 'red') . "\n";
+
+	my $i = 0;
+	my $slurpvar = $/;
+	undef $/;
+	for my $inputfile ( glob "./*.rgb565" ) {
+		open (INPUTFILE, "$inputfile") or die colored ("Error: could not open raw image '$inputfile'", 'red') . "\n";
+		$raw[$i] = <INPUTFILE>;
+		close INPUTFILE;
+
+		$i++;
+	}
+	die colored ("Error: could not find any .rgb565 file under the specified directory '$logodir'", 'red') . "\n" unless $i > 0;
+	print "Repacking $ARGV[0] image (without compression)...\n";
+
+	chdir $dir or die "\n$logodir $!";;
+	
+	$/ = $slurpvar;
+	my $num_blocks = $i;
+	print "Number of raw images found in the specified folder: $num_blocks\n";
+
+	my $logobin;
+	$i = 0;
+	do {
+		$logobin .= $raw[$i];
+		$i++;
+	} while $i < $num_blocks;
+	
+	# generate logo header according to the logo size
+	my $logo_header = gen_header($signature, length($logobin));
+	
 	$logobin = $logo_header . $logobin;
 
 	# create the output file

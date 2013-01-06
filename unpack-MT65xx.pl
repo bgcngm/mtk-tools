@@ -11,6 +11,7 @@
 #   - re-written logo images file verification (29-12-2012)
 #   - image resolution is now calculated and shown when unpacking logo images (02-01-2013)
 #   - added colored screen output (04-01-2013)
+#   - includded support for logo images containing uncompressed raw files (06-01-2013)
 #
 
 use strict;
@@ -19,12 +20,22 @@ use bytes;
 use File::Path;
 use Compress::Zlib;
 use Term::ANSIColor;
+use Scalar::Util qw(looks_like_number);
 
-my $version = "MTK-Tools by Bruno Martins\nMT65xx unpack script (last update: 04-01-2013)\n";
-my $usage = "unpack-MT65xx.pl <infile>\n  Unpacks boot, recovery or logo image\n\n";
+my $version = "MTK-Tools by Bruno Martins\nMT65xx unpack script (last update: 06-01-2013)\n";
+my $usage = "unpack-MT65xx.pl <infile> [COMMAND ...]\n  Unpacks boot, recovery or logo image\n\nOptional COMMANDs are:\n\n  -force_logo_res <width> <height>\n    Forces logo image file to be unpacked by specifying image resolution\n     (only useful when no zlib compressed images are found)\n\n";
 
 print colored ("$version", 'bold blue') . "\n";
 die "Usage: $usage" unless $ARGV[0];
+
+if ( $ARGV[1] ) {
+	if ( $ARGV[1] eq "-force_logo_res" ) {
+		die "Usage: $usage" unless looks_like_number($ARGV[2]) && looks_like_number($ARGV[3]) && !$ARGV[4];
+	}
+	else {
+		die "Usage: $usage";
+	}
+}
 
 my $inputfile = $ARGV[0];
 
@@ -126,17 +137,49 @@ sub unpack_logo {
 	# (it may happen if logo image was created with a backup tool and contains trailing zeros)
 	my $sizelogobin = -s $inputfile;
 	if ($logo_length != $sizelogobin - 512) {
-		print "Warning: unexpected logo image file size! Trying to unpack it anyway...\n";
+		print colored ("Warning: unexpected logo image file size! Trying to unpack it anyway...", 'yellow') . "\n";
 	}
 
-	# chop the header and extract logo information
-	my $logo = substr($logobin, 512);
+	# chop the header and any garbage at the EOF
+	# (only extract important logo information that contains packed raw images)
+	my $logo = substr($logobin, 512, $logo_length);
+
+	# check if logo length is really consistent
+	if ( length ($logo) != $logo_length ) {
+		die colored ("\nError: no way, the logo image file seems to be corrupted", 'red') . "\n";
+	}
+
 	my $num_blocks = unpack('V', $logo);
-	if ( ! $num_blocks ) {
-		die colored ("\nError: no zlib packed rgb565 images were found inside logo file", 'red') . "\n";
+	my $i = 0;
+
+	if (-e "$ARGV[0]-unpacked") {
+		rmtree "$ARGV[0]-unpacked";
+		print "\nRemoved old unpacked logo directory '$ARGV[0]-unpacked'\n";
 	}
 
-	my $i = 0;
+	mkdir "$ARGV[0]-unpacked" or die;
+	chdir "$ARGV[0]-unpacked" or die;
+	print "Extracting raw images to directory '$ARGV[0]-unpacked'\n";
+
+	if ( ! $num_blocks ) {
+		die "\nNo zlib packed rgb565 images were found inside logo file.\nRecheck script usage and try to use -force_logo_res switch.\n"
+			unless $ARGV[1];
+		# if no compressed files are found, try to unpack logo based on specified image resolution
+		my $image_file_size = ($ARGV[2] * $ARGV[3] * 2);
+		$num_blocks = $logo_length / $image_file_size;
+
+		print "\nNumber of uncompressed images found (based on specified resolution): $num_blocks\n";
+		
+		for $i (0 .. $num_blocks - 1) {
+			open (RAWFILE, ">$ARGV[0]-raw[$i].rgb565");
+			binmode(RAWFILE);
+			print RAWFILE substr($logo, $i * $image_file_size, $image_file_size) or die;
+			close RAWFILE;
+			print "Raw image #$i written to $ARGV[0]-raw[$i].rgb565\n";
+		}
+		goto END;
+	}
+
 	my $j = 0;
 	my (@raw_addr, @zlib_raw) = ();
 	print "\nNumber of raw images found: $num_blocks\n";
@@ -148,16 +191,6 @@ sub unpack_logo {
 
 	$i = 0;
 	my $num;
-
-	if (-e "$ARGV[0]-unpacked") {
-		rmtree "$ARGV[0]-unpacked";
-		print "Removed old unpacked logo directory '$ARGV[0]-unpacked'\n";
-	}
-
-	mkdir "$ARGV[0]-unpacked" or die;
-	chdir "$ARGV[0]-unpacked" or die;
-	print "Extracting raw images to directory '$ARGV[0]-unpacked'\n";
-
 	my $raw_num_pixels;
 	# extract rgb565 raw files (uncompress zlib rfc1950)
 	do {
@@ -188,5 +221,6 @@ sub unpack_logo {
 		$i++;
 	} while $i < $num_blocks;
 
+	END:
 	print "\nSuccessfully extracted all raw images.\n";
 }
