@@ -11,7 +11,8 @@
 #   - re-written logo images file verification (29-12-2012)
 #   - image resolution is now calculated and shown when unpacking logo images (02-01-2013)
 #   - added colored screen output (04-01-2013)
-#   - includded support for logo images containing uncompressed raw files (06-01-2013)
+#   - included support for logo images containing uncompressed raw files (06-01-2013)
+#   - more verbose output when unpacking boot and recovery images (13-01-2013)
 #
 
 use strict;
@@ -22,8 +23,8 @@ use Compress::Zlib;
 use Term::ANSIColor;
 use Scalar::Util qw(looks_like_number);
 
-my $version = "MTK-Tools by Bruno Martins\nMT65xx unpack script (last update: 06-01-2013)\n";
-my $usage = "unpack-MT65xx.pl <infile> [COMMAND ...]\n  Unpacks boot, recovery or logo image\n\nOptional COMMANDs are:\n\n  -force_logo_res <width> <height>\n    Forces logo image file to be unpacked by specifying image resolution\n     (only useful when no zlib compressed images are found)\n\n";
+my $version = "MTK-Tools by Bruno Martins\nMT65xx unpack script (last update: 13-01-2013)\n";
+my $usage = "unpack-MT65xx.pl <infile> [COMMAND ...]\n  Unpacks boot, recovery or logo image\n\nOptional COMMANDs are:\n\n  -force_logo_res <width> <height>\n    Forces logo image file to be unpacked by specifying image resolution,\n    which must be entered in pixels\n     (only useful when no zlib compressed images are found)\n\n";
 
 print colored ("$version", 'bold blue') . "\n";
 die "Usage: $usage" unless $ARGV[0];
@@ -62,6 +63,20 @@ sub unpack_boot {
 	my $bootimg = $_[0];
 	my($bootMagic, $kernelSize, $kernelLoadAddr, $ram1Size, $ram1LoadAddr, $ram2Size, $ram2LoadAddr, $tagsAddr, $pageSize, $unused1, $unused2, $bootName, $cmdLine, $id) = unpack('a8 L L L L L L L L L L a16 a512 a8', $bootimg);
 
+	print colored ("\nInput file information:\n", 'yellow') . "\n";
+	print " Kernel size: $kernelSize bytes / ";
+	printf ("load address: %#x\n", $kernelLoadAddr);
+	print " Ramdisk size: $ram1Size bytes / ";
+	printf ("load address: %#x\n", $ram1LoadAddr);
+	print " Second stage size: $ram2Size bytes / ";
+	printf ("load address: %#x\n", $ram2LoadAddr);
+	print " Page size: $pageSize bytes\n ASCIIZ product name: '$bootName'\n";
+	if ((substr($cmdLine, 0, 4) eq "\x00\x00\x00\x00")) {
+		print " Command line: (none)\n";
+	} else {
+		print " Command line: $cmdLine\n";
+	}
+	
 	my($kernel) = substr($bootimg, $pageSize, $kernelSize);
 
 	open (KERNELFILE, ">$ARGV[0]-kernel.img");
