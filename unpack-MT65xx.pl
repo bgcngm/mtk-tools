@@ -13,6 +13,7 @@
 #   - added colored screen output (04-01-2013)
 #   - included support for logo images containing uncompressed raw files (06-01-2013)
 #   - more verbose output when unpacking boot and recovery images (13-01-2013)
+#   - kernel or ramdisk extraction only is now supported (13-01-2013)
 #
 
 use strict;
@@ -24,16 +25,17 @@ use Term::ANSIColor;
 use Scalar::Util qw(looks_like_number);
 
 my $version = "MTK-Tools by Bruno Martins\nMT65xx unpack script (last update: 13-01-2013)\n";
-my $usage = "unpack-MT65xx.pl <infile> [COMMAND ...]\n  Unpacks boot, recovery or logo image\n\nOptional COMMANDs are:\n\n  -force_logo_res <width> <height>\n    Forces logo image file to be unpacked by specifying image resolution,\n    which must be entered in pixels\n     (only useful when no zlib compressed images are found)\n\n";
+my $usage = "unpack-MT65xx.pl <infile> [COMMAND ...]\n  Unpacks boot, recovery or logo image\n\nOptional COMMANDs are:\n\n  -kernel_only\n    Extract kernel only from boot or recovery image\n\n  -ramdisk_only\n    Extract ramdisk only from boot or recovery image\n\n  -force_logo_res <width> <height>\n    Forces logo image file to be unpacked by specifying image resolution,\n    which must be entered in pixels\n     (only useful when no zlib compressed images are found)\n\n";
 
 print colored ("$version", 'bold blue') . "\n";
 die "Usage: $usage" unless $ARGV[0];
 
 if ( $ARGV[1] ) {
-	if ( $ARGV[1] eq "-force_logo_res" ) {
+	if ( $ARGV[1] eq "-kernel_only" || $ARGV[1] eq "-ramdisk_only" ) {
+		die "Usage: $usage" unless !$ARGV[2];
+	} elsif ( $ARGV[1] eq "-force_logo_res" ) {
 		die "Usage: $usage" unless looks_like_number($ARGV[2]) && looks_like_number($ARGV[3]) && !$ARGV[4];
-	}
-	else {
+	} else {
 		die "Usage: $usage";
 	}
 }
@@ -50,11 +52,23 @@ $/ = $slurpvar;
 if ((substr($input, 0, 4) eq "\x88\x16\x88\x58") & (substr($input, 8, 4) eq "LOGO")) {
 	# if the input file contains the logo signature, try to unpack it
 	print "Valid logo signature found...\n";
+	if ( $ARGV[1] ) {
+		die colored ("\nError: $ARGV[1] switch can't be used with logo images", 'red') . "\n"
+			if ($ARGV[1] ne "-force_logo_res");
+	}
 	unpack_logo($input);
 } elsif (substr($input, 0, 7) eq "\x41\x4e\x44\x52\x4f\x49\x44") {
 	# else, a valid Android signature is found, try to unpack boot or recovery image
 	print "Valid Android signature found...\n";
-	unpack_boot($input);
+	if ( $ARGV[1] ) {
+		die colored ("\nError: $ARGV[1] switch can't be used with boot or recovery images", 'red') . "\n"
+			if ($ARGV[1] eq "-force_logo_res");
+		$ARGV[1] =~ s/-//;
+		$ARGV[1] =~ s/_only//;
+		unpack_boot($input, $ARGV[1]);
+	} else {
+		unpack_boot($input, "extract_all");
+	}
 } else {
 	die colored ("Error: the input file does not appear to be supported or valid", 'red') . "\n";
 }
@@ -72,55 +86,60 @@ sub unpack_boot {
 	printf ("load address: %#x\n", $ram2LoadAddr);
 	print " Page size: $pageSize bytes\n ASCIIZ product name: '$bootName'\n";
 	if ((substr($cmdLine, 0, 4) eq "\x00\x00\x00\x00")) {
-		print " Command line: (none)\n";
+		print " Command line: (none)\n\n";
 	} else {
-		print " Command line: $cmdLine\n";
+		print " Command line: $cmdLine\n\n";
 	}
 	
-	my($kernel) = substr($bootimg, $pageSize, $kernelSize);
+	if ( $_[1] eq "kernel" || $_[1] eq "extract_all" ) {
+		my($kernel) = substr($bootimg, $pageSize, $kernelSize);
 
-	open (KERNELFILE, ">$ARGV[0]-kernel.img");
-	binmode(KERNELFILE);
-	print KERNELFILE $kernel or die;
-	close KERNELFILE;
+		open (KERNELFILE, ">$ARGV[0]-kernel.img");
+		binmode(KERNELFILE);
+		print KERNELFILE $kernel or die;
+		close KERNELFILE;
 
-	print "\nKernel written to '$ARGV[0]-kernel.img'\n";
-
-	my($kernelAddr) = $pageSize;
-	my($kernelSizeInPages) = int(($kernelSize + $pageSize - 1) / $pageSize);
-
-	my($ram1Addr) = (1 + $kernelSizeInPages) * $pageSize;
-
-	my($ram1) = substr($bootimg, $ram1Addr, $ram1Size);
-
-	# chop ramdisk header
-	$ram1 = substr($ram1, 512);
-
-	if (substr($ram1, 0, 2) ne "\x1F\x8B") {
-		die colored ("\nError: the boot image does not appear to contain a valid gzip file", 'red') . "\n";
+		print "Kernel written to '$ARGV[0]-kernel.img'\n";
 	}
 
-	open (RAMDISKFILE, ">$ARGV[0]-ramdisk.cpio.gz");
-	binmode(RAMDISKFILE);
-	print RAMDISKFILE $ram1 or die;
-	close RAMDISKFILE;
+	if ( $_[1] eq "ramdisk" || $_[1] eq "extract_all" ) {
+		my($kernelAddr) = $pageSize;
+		my($kernelSizeInPages) = int(($kernelSize + $pageSize - 1) / $pageSize);
 
-	print "Ramdisk written to '$ARGV[0]-ramdisk.cpio.gz'\n";
+		my($ram1Addr) = (1 + $kernelSizeInPages) * $pageSize;
 
-	if (-e "$ARGV[0]-ramdisk") {
-		rmtree "$ARGV[0]-ramdisk";
-		print "Removed old ramdisk directory '$ARGV[0]-ramdisk'\n";
+		my($ram1) = substr($bootimg, $ram1Addr, $ram1Size);
+
+		# chop ramdisk header
+		$ram1 = substr($ram1, 512);
+
+		if (substr($ram1, 0, 2) ne "\x1F\x8B") {
+			die colored ("\nError: the boot image does not appear to contain a valid gzip file", 'red') . "\n";
+		}
+
+		open (RAMDISKFILE, ">$ARGV[0]-ramdisk.cpio.gz");
+		binmode(RAMDISKFILE);
+		print RAMDISKFILE $ram1 or die;
+		close RAMDISKFILE;
+
+		print "Ramdisk written to '$ARGV[0]-ramdisk.cpio.gz'\n";
+
+		if (-e "$ARGV[0]-ramdisk") {
+			rmtree "$ARGV[0]-ramdisk";
+			print "Removed old ramdisk directory '$ARGV[0]-ramdisk'\n";
+		}
+
+		mkdir "$ARGV[0]-ramdisk" or die;
+		chdir "$ARGV[0]-ramdisk" or die;
+		die colored ("\nError: cpio not found!", 'red') . "\n"
+			unless ( -e "/usr/bin/cpio" ) || ( -e "/usr/local/bin/cpio" ) || ( -e "/bin/cpio" ) ;
+		print "Ramdisk size: ";
+		system ("gzip -d -c ../$ARGV[0]-ramdisk.cpio.gz | cpio -i");
+
+		print "Extracted ramdisk contents to directory '$ARGV[0]-ramdisk'\n";
 	}
 
-	mkdir "$ARGV[0]-ramdisk" or die;
-	chdir "$ARGV[0]-ramdisk" or die;
-	die colored ("\nError: cpio not found!", 'red') . "\n"
-		unless ( -e "/usr/bin/cpio" ) || ( -e "/usr/local/bin/cpio" ) || ( -e "/bin/cpio" ) ;
-	print "Ramdisk size: ";
-	system ("gzip -d -c ../$ARGV[0]-ramdisk.cpio.gz | cpio -i");
-
-	print "Extracted ramdisk contents to directory '$ARGV[0]-ramdisk'\n";
-	print "\nSuccessfully unpacked kernel and ramdisk.\n";
+	printf ("\nSuccessfully unpacked %s.\n", $_[1] eq "extract_all" ? "kernel and ramdisk" : $_[1] );
 }
 
 sub unpack_logo {
