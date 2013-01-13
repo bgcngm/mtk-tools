@@ -14,6 +14,7 @@
 #   - included support for logo images containing uncompressed raw files (06-01-2013)
 #   - more verbose output when unpacking boot and recovery images (13-01-2013)
 #   - kernel or ramdisk extraction only is now supported (13-01-2013)
+#   - re-written check of needed binaries (13-01-2013)
 #
 
 use strict;
@@ -131,8 +132,10 @@ sub unpack_boot {
 
 		mkdir "$ARGV[0]-ramdisk" or die;
 		chdir "$ARGV[0]-ramdisk" or die;
-		die colored ("\nError: cpio not found!", 'red') . "\n"
-			unless ( -e "/usr/bin/cpio" ) || ( -e "/usr/local/bin/cpio" ) || ( -e "/bin/cpio" ) ;
+		foreach my $tool ("gzip", "cpio") {
+			die colored ("\nError: $tool binary not found!", 'red') . "\n"
+				if system ("command -v $tool >/dev/null 2>&1");
+		}
 		print "Ramdisk size: ";
 		system ("gzip -d -c ../$ARGV[0]-ramdisk.cpio.gz | cpio -i");
 

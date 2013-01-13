@@ -9,7 +9,8 @@
 #   - added cygwin mkbootimg binary and propper fix (17-05-2012)
 #   - included support for MT65xx logo images (31-07-2012)
 #   - added colored screen output (04-01-2013)
-#   - includded support for logo images containing uncompressed raw files (06-01-2013)
+#   - included support for logo images containing uncompressed raw files (06-01-2013)
+#   - re-written check of needed binaries (13-01-2013)
 #
 
 use strict;
@@ -20,7 +21,7 @@ use Term::ANSIColor;
 
 my $dir = getcwd;
 
-my $version = "MTK-Tools by Bruno Martins\nMT65xx repack script (last update: 06-01-2013)\n";
+my $version = "MTK-Tools by Bruno Martins\nMT65xx repack script (last update: 13-01-2013)\n";
 my $usage = "repack-MT65xx.pl COMMAND [...]\n\nCOMMANDs are:\n\n  -boot <kernel> <ramdisk-directory> <outfile>\n    Repacks boot image\n\n  -recovery <kernel> <ramdisk-directory> <outfile>\n    Repacks recovery image\n\n  -logo [--no_compression] <logo-directory> <outfile>\n    Repacks logo image\n\n";
 
 print colored ("$version", 'bold blue') . "\n";
@@ -56,8 +57,10 @@ sub repack_boot {
 	die colored ("Error: file '$kernel' not found", 'red') . "\n" unless ( -e $kernel );
 	chdir $ramdiskdir or die colored ("Error: directory '$ramdiskdir' not found", 'red') . "\n";
 
-	die colored ("Error: cpio not found!", 'red') . "\n"
-		unless ( -e "/usr/bin/cpio" ) || ( -e "/usr/local/bin/cpio" ) || ( -e "/bin/cpio" ) ;
+	foreach my $tool ("find", "cpio", "gzip") {
+		die colored ("Error: $tool binary not found!", 'red') . "\n"
+			if system ("command -v $tool >/dev/null 2>&1");
+	}
 	print "Repacking $ARGV[0] image...\nRamdisk size: ";
 	system ("find . | cpio -o -H newc | gzip > $dir/ramdisk-repack.cpio.gz");
 
