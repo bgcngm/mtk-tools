@@ -15,6 +15,7 @@
 #   - more verbose output when unpacking boot and recovery images (13-01-2013)
 #   - kernel or ramdisk extraction only is now supported (13-01-2013)
 #   - re-written check of needed binaries (13-01-2013)
+#   - ramdisk.cpio.gz deleted after successful extraction (15-01-2013)
 #
 
 use strict;
@@ -25,7 +26,7 @@ use Compress::Zlib;
 use Term::ANSIColor;
 use Scalar::Util qw(looks_like_number);
 
-my $version = "MTK-Tools by Bruno Martins\nMT65xx unpack script (last update: 13-01-2013)\n";
+my $version = "MTK-Tools by Bruno Martins\nMT65xx unpack script (last update: 15-01-2013)\n";
 my $usage = "unpack-MT65xx.pl <infile> [COMMAND ...]\n  Unpacks boot, recovery or logo image\n\nOptional COMMANDs are:\n\n  -kernel_only\n    Extract kernel only from boot or recovery image\n\n  -ramdisk_only\n    Extract ramdisk only from boot or recovery image\n\n  -force_logo_res <width> <height>\n    Forces logo image file to be unpacked by specifying image resolution,\n    which must be entered in pixels\n     (only useful when no zlib compressed images are found)\n\n";
 
 print colored ("$version", 'bold blue') . "\n";
@@ -123,8 +124,6 @@ sub unpack_boot {
 		print RAMDISKFILE $ram1 or die;
 		close RAMDISKFILE;
 
-		print "Ramdisk written to '$ARGV[0]-ramdisk.cpio.gz'\n";
-
 		if (-e "$ARGV[0]-ramdisk") {
 			rmtree "$ARGV[0]-ramdisk";
 			print "Removed old ramdisk directory '$ARGV[0]-ramdisk'\n";
@@ -138,6 +137,7 @@ sub unpack_boot {
 		}
 		print "Ramdisk size: ";
 		system ("gzip -d -c ../$ARGV[0]-ramdisk.cpio.gz | cpio -i");
+		system ("rm ../$ARGV[0]-ramdisk.cpio.gz");
 
 		print "Extracted ramdisk contents to directory '$ARGV[0]-ramdisk'\n";
 	}
