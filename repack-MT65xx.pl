@@ -22,37 +22,33 @@ use FindBin qw($Bin);
 
 my $dir = getcwd;
 
-my $version = "MTK-Tools by Bruno Martins\nMT65xx repack script (last update: 20-01-2013)\n";
+my $version = "MTK-Tools by Bruno Martins\nMT65xx repack script (last update: 21-01-2013)\n";
 my $usage = "repack-MT65xx.pl COMMAND [...]\n\nCOMMANDs are:\n\n  -boot <kernel> <ramdisk-directory> <outfile>\n    Repacks boot image\n\n  -recovery <kernel> <ramdisk-directory> <outfile>\n    Repacks recovery image\n\n  -logo [--no_compression] <logo-directory> <outfile>\n    Repacks logo image\n\n";
 
 print colored ("$version", 'bold blue') . "\n";
 die "Usage: $usage" unless $ARGV[0] && $ARGV[1] && $ARGV[2];
 
-if ( $ARGV[0] eq "-boot" ) {
+if ( $ARGV[0] eq "-boot" || $ARGV[0] eq "-recovery" ) {
 	die "Usage: $usage" unless $ARGV[3] && !$ARGV[4];
-	repack_boot("ROOTFS");
-} elsif ( $ARGV[0] eq "-recovery" ) {
-	die "Usage: $usage" unless $ARGV[3] && !$ARGV[4];
-	repack_boot("RECOVERY");
+	repack_boot();
 } elsif ( $ARGV[0] eq "-logo" ) {
 	if ( $ARGV[1] eq "--no_compression" ) {
 		die "Usage: $usage" unless $ARGV[2] && $ARGV[3] && !$ARGV[4];
-		repack_logo_uncompressed("LOGO");
-	}
-	else {
+	} else {
 		die "Usage: $usage" unless !$ARGV[3];
-		repack_logo("LOGO");
+		splice (@ARGV, 1, 0, "--compression"); 
 	}
+	shift (@ARGV);
+	repack_logo();
 } else {
 	die "Usage: $usage";
 }
 
 sub repack_boot {
-	my $kernel = $ARGV[1];
-	my $ramdiskdir = $ARGV[2];
-	my $outfile = $ARGV[3];
-	my $signature = $_[0];
-	$ARGV[0] =~ s/-//;
+	my ($type, $kernel, $ramdiskdir, $outfile) = @ARGV;
+	$type =~ s/^-//;
+	$ramdiskdir =~ s/\/$//;
+	my $signature = ($type eq "boot" ? "ROOTFS" : "RECOVERY");
 	
 	die colored ("Error: file '$kernel' not found", 'red') . "\n" unless ( -e $kernel );
 	chdir $ramdiskdir or die colored ("Error: directory '$ramdiskdir' not found", 'red') . "\n";
@@ -61,7 +57,7 @@ sub repack_boot {
 		die colored ("Error: $tool binary not found!", 'red') . "\n"
 			if system ("command -v $tool >/dev/null 2>&1");
 	}
-	print "Repacking $ARGV[0] image...\nRamdisk size: ";
+	print "Repacking $type image...\nRamdisk size: ";
 	system ("find . | cpio -o -H newc | gzip > $dir/ramdisk-repack.cpio.gz");
 
 	chdir $dir or die "\n$ramdiskdir $!";;
@@ -96,21 +92,22 @@ sub repack_boot {
 	unlink ("ramdisk-repack.cpio.gz") or die $!;
 	system ("rm new-ramdisk-repack.cpio.gz");
 
-	print "\nRepacked $ARGV[0] image into '$outfile'.\n";
+	print "\nRepacked $type image into '$outfile'.\n";
 }
 
 sub repack_logo {
-	my $logodir = $ARGV[1];
-	my $outfile = $ARGV[2];
-	my $signature = $_[0];
-	$ARGV[0] =~ s/-//;
+	my ($type, $logodir, $outfile) = @ARGV;
+	my ($logobin, $logo_length);
+	my (@raw_addr, @raw, @zlib_raw);
+	$logodir =~ s/\/$//;
+
+	my $compression = ($type eq "--no_compression" ? 0 : 1);
+	my $filename = $logodir =~ s/-unpacked$//r;
 
 	chdir $logodir or die colored ("Error: directory '$logodir' not found", 'red') . "\n";
 
-	my (@raw_addr, @zlib_raw) = ();
-
 	my $i = 0;
-	print "Repacking $ARGV[0] image...\n";
+	printf ("Repacking logo image%s...\n", $compression ? "" : " (without compression)" );
 	for my $inputfile ( glob "./*.rgb565" ) {
 		open (INPUTFILE, "$inputfile") or die colored ("Error: could not open raw image '$inputfile'", 'red') . "\n";
 		my $input;
@@ -118,85 +115,48 @@ sub repack_logo {
 			$input .= $_;
 		}
 		close INPUTFILE;
+		$raw[$i] = $input;
 
-		# deflate all rgb565 raw files found (compress zlib rfc1950)
-		$zlib_raw[$i] = compress($input,Z_BEST_COMPRESSION);
-
-		$i++;
-	}
-	die colored ("Error: could not find any .rgb565 file under the specified directory '$logodir'", 'red') . "\n" unless $i > 0;
-
-	chdir $dir or die "\n$logodir $!";;
-
-	my $num_blocks = $i;
-	print "Number of raw images found in the specified folder: $num_blocks\n";
-	
-	my $logo_length = (4 + 4 + $num_blocks * 4);
-	# calculate the start address of each raw image and the new file size
-	for my $i (0 .. $num_blocks - 1) {
-		$raw_addr[$i] = $logo_length;
-		$logo_length += length($zlib_raw[$i]);
-	}
-
-	# generate logo header according to the logo size
-	my $logo_header = gen_header($signature, $logo_length);
-	
-	my $logobin = pack('L L', $num_blocks, $logo_length);
-	
-	for my $i (0 .. $num_blocks - 1) {
-		$logobin .= pack('L', $raw_addr[$i]);
-	}
-
-	for my $i (0 .. $num_blocks - 1) {
-		$logobin .= $zlib_raw[$i];
-	}
-
-	$logobin = $logo_header . $logobin;
-
-	# create the output file
-	open (LOGOFILE, ">$outfile");
-	binmode (LOGOFILE);
-	print LOGOFILE $logobin or die;
-	close (LOGOFILE);
-
-	print "\nRepacked $ARGV[0] image into '$outfile'.\n";
-}
-
-sub repack_logo_uncompressed {
-	my @raw;
-	my $logodir = $ARGV[2];
-	my $outfile = $ARGV[3];
-	my $signature = $_[0];
-	$ARGV[0] =~ s/-//;
-
-	chdir $logodir or die colored ("Error: directory '$logodir' not found", 'red') . "\n";
-
-	my $i = 0;
-	print "Repacking $ARGV[0] image (without compression)...\n";
-	for my $inputfile ( glob "./*.rgb565" ) {
-		open (INPUTFILE, "$inputfile") or die colored ("Error: could not open raw image '$inputfile'", 'red') . "\n";
-		while (<INPUTFILE>) {
-			$raw[$i] .= $_;
+		if ($compression) {
+			# deflate all rgb565 raw images (compress zlib rfc1950)
+			$zlib_raw[$i] = compress($raw[$i],Z_BEST_COMPRESSION);
 		}
-		close INPUTFILE;
 
 		$i++;
 	}
 	die colored ("Error: could not find any .rgb565 file under the specified directory '$logodir'", 'red') . "\n" unless $i > 0;
 
 	chdir $dir or die "\n$logodir $!";;
-	
-	my $num_blocks = $i;
-	print "Number of raw images found in the specified folder: $num_blocks\n";
 
-	my $logobin;
-	for my $i (0 .. $num_blocks - 1) {
-		$logobin .= $raw[$i];
+	my $num_blocks = $i;
+	print "Number of images found inside the specified folder: $num_blocks\n";
+
+	if ($compression) {
+		$logo_length = (4 + 4 + $num_blocks * 4);
+		# calculate the start address of each raw image and the new file size
+		for my $i (0 .. $num_blocks - 1) {
+			$raw_addr[$i] = $logo_length;
+			$logo_length += length($zlib_raw[$i]);
+		}
+
+		$logobin = pack('L L', $num_blocks, $logo_length);
+	
+		for my $i (0 .. $num_blocks - 1) {
+			$logobin .= pack('L', $raw_addr[$i]);
+		}
+
+		for my $i (0 .. $num_blocks - 1) {
+			$logobin .= $zlib_raw[$i];
+		}
+	} else {
+		for my $i (0 .. $num_blocks - 1) {
+			$logobin .= $raw[$i];
+		}
+		$logo_length = length($logobin);
 	}
-	
 	# generate logo header according to the logo size
-	my $logo_header = gen_header($signature, length($logobin));
-	
+	my $logo_header = gen_header("LOGO", $logo_length);
+
 	$logobin = $logo_header . $logobin;
 
 	# create the output file
@@ -205,7 +165,7 @@ sub repack_logo_uncompressed {
 	print LOGOFILE $logobin or die;
 	close (LOGOFILE);
 
-	print "\nRepacked $ARGV[0] image into '$outfile'.\n";
+	print "\nRepacked logo image into '$outfile'.\n";
 }
 
 sub gen_header {
