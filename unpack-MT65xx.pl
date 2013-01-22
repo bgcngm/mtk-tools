@@ -145,25 +145,18 @@ sub unpack_boot {
 
 sub unpack_logo {
 	my $logobin = $_[0];
-	my @resolution = (
-		# HD (High-Definition)
-		[360,640,"(nHD)"], [540,960,"(qHD)"], [720,1280,"(HD)"], [1080,1920,"(FHD)"],
-		[1440,2560,"(WQHD)"], [2160,3840,"(QFHD)"], [4320,7680,"(UHD)"], 
-		# VGA (Video Graphics Array)
-		[120,160,"(QQVGA)"], [160,240,"(HQVGA)"], [240,320,"(QVGA)"],
-		[240,400,"(WQVGA)"], [320,480,"(HVGA)"], [480,640,"(VGA)"],
-		[480,800,"(WVGA)"], [480,854,"(FWVGA)"], [600,800,"(SVGA)"],
-		[640,960,"(DVGA)"], [576,1024,"(WSVGA)"], [600,1024,"(WSVGA)"],
-		# XGA (Extended Graphics Array)
-		[768,1024,"(XGA)"], [768,1280,"(WXGA)"], [864,1152,"(XGA+)"],
-		[900,1440,"(WXGA+)"], [1024,1280,"(SXGA)"], [1050,1400,"(SXGA+)"],
-		[1050,1680,"(WSXGA+)"], [1200,1600,"(UXGA)"], [1200,1920,"(WUXGA)"], 
-		# Quad XGA (Quad Extended Graphics Array)
-		[1152,2048,"(QWXGA)"], [1536,2048,"(QXGA)"], [1600,2560,"(WQXGA)"],
-		[2048,2560,"(QSXGA)"], [2048,3200,"(WQSXGA)"], [2400,3200,"(QUXGA)"], [2400,3840,"(WQUXGA)"],
-		# Others (found in some MediaTek logo images)
-		[38,54,""], [48,54,""], [135,24,""], [135,1,""]
-	);
+	my @resolution;
+
+	# parse logo_res.txt file if it exists
+	if (-e "$Bin/logo_res.txt") {
+		open (LOGO_RESFILE, "$Bin/logo_res.txt") or die colored ("Error: could not open file '$Bin/logo_res.txt'", 'red') . "\n";
+		while (<LOGO_RESFILE>) {
+			if ($_ =~ /\[(\d+),(\d+),(.*)\]$/) {
+				push (@resolution, [$1, $2, $3]);
+			}
+		}
+		close (LOGO_RESFILE);
+	}
 
 	# get logo header
 	my $header = substr($logobin, 0, 512);
