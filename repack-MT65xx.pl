@@ -13,7 +13,7 @@
 #   - re-written check of needed binaries (13-01-2013)
 #
 
-use strict;
+use v5.14;
 use warnings;
 use Cwd;
 use Compress::Zlib;
@@ -22,7 +22,7 @@ use FindBin qw($Bin);
 
 my $dir = getcwd;
 
-my $version = "MTK-Tools by Bruno Martins\nMT65xx repack script (last update: 21-01-2013)\n";
+my $version = "MTK-Tools by Bruno Martins\nMT65xx repack script (last update: 22-01-2013)\n";
 my $usage = "repack-MT65xx.pl COMMAND [...]\n\nCOMMANDs are:\n\n  -boot <kernel> <ramdisk-directory> <outfile>\n    Repacks boot image\n\n  -recovery <kernel> <ramdisk-directory> <outfile>\n    Repacks recovery image\n\n  -logo [--no_compression] <logo-directory> <outfile>\n    Repacks logo image\n\n";
 
 print colored ("$version", 'bold blue') . "\n";

@@ -18,15 +18,16 @@
 #   - ramdisk.cpio.gz deleted after successful extraction (15-01-2013)
 #
 
-use strict;
+use v5.14;
 use warnings;
 use bytes;
 use File::Path;
 use Compress::Zlib;
 use Term::ANSIColor;
 use Scalar::Util qw(looks_like_number);
+use FindBin qw($Bin);
 
-my $version = "MTK-Tools by Bruno Martins\nMT65xx unpack script (last update: 21-01-2013)\n";
+my $version = "MTK-Tools by Bruno Martins\nMT65xx unpack script (last update: 22-01-2013)\n";
 my $usage = "unpack-MT65xx.pl <infile> [COMMAND ...]\n  Unpacks boot, recovery or logo image\n\nOptional COMMANDs are:\n\n  -kernel_only\n    Extract kernel only from boot or recovery image\n\n  -ramdisk_only\n    Extract ramdisk only from boot or recovery image\n\n  -force_logo_res <width> <height>\n    Forces logo image file to be unpacked by specifying image resolution,\n    which must be entered in pixels\n     (only useful when no zlib compressed images are found)\n\n";
 
 print colored ("$version", 'bold blue') . "\n";
