@@ -11,6 +11,7 @@
 #   - added colored screen output (04-01-2013)
 #   - included support for logo images containing uncompressed raw files (06-01-2013)
 #   - re-written check of needed binaries (13-01-2013)
+#   - added rgb565 <=> png images conversion (27-01-2013)
 #
 
 use v5.14;
@@ -19,10 +20,11 @@ use Cwd;
 use Compress::Zlib;
 use Term::ANSIColor;
 use FindBin qw($Bin);
+use File::Basename;
 
 my $dir = getcwd;
 
-my $version = "MTK-Tools by Bruno Martins\nMT65xx repack script (last update: 22-01-2013)\n";
+my $version = "MTK-Tools by Bruno Martins\nMT65xx repack script (last update: 27-01-2013)\n";
 my $usage = "repack-MT65xx.pl COMMAND [...]\n\nCOMMANDs are:\n\n  -boot <kernel> <ramdisk-directory> <outfile>\n    Repacks boot image\n\n  -recovery <kernel> <ramdisk-directory> <outfile>\n    Repacks recovery image\n\n  -logo [--no_compression] <logo-directory> <outfile>\n    Repacks logo image\n\n";
 
 print colored ("$version", 'bold blue') . "\n";
@@ -108,32 +110,46 @@ sub repack_logo {
 
 	my $i = 0;
 	printf ("Repacking logo image%s...\n", $compression ? "" : " (without compression)" );
-	for my $inputfile ( glob "./*.rgb565" ) {
-		open (INPUTFILE, "$inputfile") or die colored ("Error: could not open raw image '$inputfile'", 'red') . "\n";
-		my $input;
-			while (<INPUTFILE>) {
-			$input .= $_;
+	for my $inputfile ( glob "./$filename-img[*.*" ) {
+		my $extension = (fileparse($inputfile, qr/\.[^.]*/))[2];
+		$inputfile =~ s/^.\///;
+		
+		if ($extension eq ".png") {
+			die colored ("Error: ImageMagick not found!", 'red') . "\n"
+				if system ("command -v convert >/dev/null 2>&1");
+
+			print "Converting and packing '$inputfile'\n";
+			$raw[$i] = png_to_rgb565($inputfile);
+		} elsif ($extension eq ".rgb565") {
+			open (RGB565FILE, "$inputfile") or die colored ("Error: could not open image '$inputfile'", 'red') . "\n";
+			my $input;
+				while (<RGB565FILE>) {
+				$input .= $_;
+			}
+			close (RGB565FILE);
+			print "Packing '$inputfile'\n";
+			$raw[$i] = $input;
+		} else {
+			next;
 		}
-		close INPUTFILE;
-		$raw[$i] = $input;
 
 		if ($compression) {
-			# deflate all rgb565 raw images (compress zlib rfc1950)
+			# deflate all rgb565 images (compress zlib rfc1950)
 			$zlib_raw[$i] = compress($raw[$i],Z_BEST_COMPRESSION);
 		}
 
 		$i++;
 	}
-	die colored ("Error: could not find any .rgb565 file under the specified directory '$logodir'", 'red') . "\n" unless $i > 0;
+	die colored ("Error: could not find any .png or .rgb565 file under the specified directory '$logodir'", 'red') . "\n" unless $i > 0;
 
 	chdir $dir or die "\n$logodir $!";;
 
 	my $num_blocks = $i;
-	print "Number of images found inside the specified folder: $num_blocks\n";
+	print "Number of images found and packed into new logo image: $num_blocks\n";
 
 	if ($compression) {
 		$logo_length = (4 + 4 + $num_blocks * 4);
-		# calculate the start address of each raw image and the new file size
+		# calculate the start address of each rgb565 image and the new file size
 		for my $i (0 .. $num_blocks - 1) {
 			$raw_addr[$i] = $logo_length;
 			$logo_length += length($zlib_raw[$i]);
@@ -172,4 +188,26 @@ sub gen_header {
 	my ($header_type, $length) = @_;
 
 	return pack('a4 L a32 a472', "\x88\x16\x88\x58", $length, $header_type, "\xFF"x472);
+}
+
+sub png_to_rgb565 {
+	my $filename = $_[0] =~ s/.png$//r;
+	my ($rgb565_data, $data, @encoded);
+
+	# convert png into raw rgb (rgb888)
+	system ("convert -depth 8 $filename.png rgb:$filename.raw");
+
+	# convert raw rgb (rgb888) into rgb565
+	open (RAWFILE, "$filename.raw") or die colored ("Error: could not open image '$filename.raw'", 'red') . "\n";
+	binmode (RAWFILE);
+	while (read (RAWFILE, $data, 3) != 0) {
+		@encoded = unpack('C3', $data);
+		$rgb565_data .= pack('S', (($encoded[0] >> 3) << 11) | (($encoded[1] >> 2) << 5) | ($encoded[2] >> 3));
+	}
+	close (RAWFILE);
+
+	# cleanup
+	system ("rm $filename.raw");
+
+	return $rgb565_data;
 }

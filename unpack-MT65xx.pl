@@ -16,6 +16,7 @@
 #   - kernel or ramdisk extraction only is now supported (13-01-2013)
 #   - re-written check of needed binaries (13-01-2013)
 #   - ramdisk.cpio.gz deleted after successful extraction (15-01-2013)
+#   - added rgb565 <=> png images conversion (27-01-2013)
 #
 
 use v5.14;
@@ -27,7 +28,7 @@ use Term::ANSIColor;
 use Scalar::Util qw(looks_like_number);
 use FindBin qw($Bin);
 
-my $version = "MTK-Tools by Bruno Martins\nMT65xx unpack script (last update: 22-01-2013)\n";
+my $version = "MTK-Tools by Bruno Martins\nMT65xx unpack script (last update: 27-01-2013)\n";
 my $usage = "unpack-MT65xx.pl <infile> [COMMAND ...]\n  Unpacks boot, recovery or logo image\n\nOptional COMMANDs are:\n\n  -kernel_only\n    Extract kernel only from boot or recovery image\n\n  -ramdisk_only\n    Extract ramdisk only from boot or recovery image\n\n  -force_logo_res <width> <height>\n    Forces logo image file to be unpacked by specifying image resolution,\n    which must be entered in pixels\n     (only useful when no zlib compressed images are found)\n\n";
 
 print colored ("$version", 'bold blue') . "\n";
@@ -151,12 +152,15 @@ sub unpack_logo {
 	if (-e "$Bin/logo_res.txt") {
 		open (LOGO_RESFILE, "$Bin/logo_res.txt") or die colored ("Error: could not open file '$Bin/logo_res.txt'", 'red') . "\n";
 		while (<LOGO_RESFILE>) {
-			if ($_ =~ /\[(\d+),(\d+),(.*)\]$/) {
+			if ($_ =~ /^\[(\d+),(\d+),(.*)\]$/) {
 				push (@resolution, [$1, $2, $3]);
 			}
 		}
 		close (LOGO_RESFILE);
 	}
+
+	# check if ImageMagick is installed
+	my $ImageMagick_installed = system ("command -v convert >/dev/null 2>&1") ? 0 : 1;
 
 	# get logo header
 	my $header = substr($logobin, 0, 512);
@@ -170,7 +174,7 @@ sub unpack_logo {
 	}
 
 	# chop the header and any eventual garbage found at the EOF
-	# (only extract important logo information that contains packed raw images)
+	# (take only the important logo part which contains packed rgb565 images)
 	my $logo = substr($logobin, 512, $logo_length);
 
 	# check if logo length is really consistent
@@ -187,7 +191,7 @@ sub unpack_logo {
 	chdir "$ARGV[0]-unpacked" or die;
 	print "Extracting raw images to directory '$ARGV[0]-unpacked'\n";
 
-	# get the number of packed raw images
+	# get the number of packed rgb565 images
 	my $num_blocks = unpack('V', $logo);
 
 	if ( ! $num_blocks ) {
@@ -196,28 +200,36 @@ sub unpack_logo {
 
 		# if no compressed files are found, try to unpack logo based on specified image resolution
 		my $image_file_size = ($ARGV[2] * $ARGV[3] * 2);
-		$num_blocks = $logo_length / $image_file_size;
+		$num_blocks = int ($logo_length / $image_file_size);
 
 		print "\nNumber of uncompressed images found (based on specified resolution): $num_blocks\n";
 		
 		for my $i (0 .. $num_blocks - 1) {
 			my $filename = sprintf ("%s-img[%02d]", $ARGV[0], $i);
 
-			open (RAWFILE, ">$filename.rgb565");
-			binmode (RAWFILE);
-			print RAWFILE substr($logo, $i * $image_file_size, $image_file_size) or die;
-			close (RAWFILE);
-			print "Raw image #$i written to '$filename.rgb565'\n";
+			open (RGB565FILE, ">$filename.rgb565");
+			binmode (RGB565FILE);
+			print RGB565FILE substr($logo, $i * $image_file_size, $image_file_size) or die;
+			close (RGB565FILE);
+			
+			if ( $ImageMagick_installed ) {
+				# convert rgb565 into png
+				rgb565_to_png($filename, $ARGV[2], $ARGV[3]);
+
+				print "Image #$i written to '$filename.png'\n";
+			} else {
+				print "Image #$i written to '$filename.rgb565'\n";
+			}
 		}
 	} else {
 		my $j = 0;
 		my (@raw_addr, @zlib_raw) = ();
 		print "\nNumber of raw images found: $num_blocks\n";
-		# get the starting address of each raw file
+		# get the starting address of each rgb565 image
 		for my $i (0 .. $num_blocks - 1) {
 			$raw_addr[$i] = unpack('L', substr($logo, 8+$i*4, 4));
 		}
-		# extract rgb565 raw files (uncompress zlib rfc1950)
+		# extract rgb565 images (uncompress zlib rfc1950)
 		for my $i (0 .. $num_blocks - 1) {
 			if ($i < $num_blocks-1) {
 				$zlib_raw[$i] = substr($logo, $raw_addr[$i], $raw_addr[$i+1]-$raw_addr[$i]);
@@ -226,26 +238,62 @@ sub unpack_logo {
 			}
 			my $filename = sprintf ("%s-img[%02d]", $ARGV[0], $i);
 
-			open (RAWFILE, ">$filename.rgb565");
-			binmode (RAWFILE);
-			print RAWFILE uncompress($zlib_raw[$i]) or die;
-			close (RAWFILE);
-		
-			print "Raw image #$i written to '$filename.rgb565'\n";
-			# calculate rgb565 image resolution
+			open (RGB565FILE, ">$filename.rgb565");
+			binmode (RGB565FILE);
+			print RGB565FILE uncompress($zlib_raw[$i]) or die;
+			close (RGB565FILE);
+
+			# calculate image resolution
 			my $raw_num_pixels = length (uncompress($zlib_raw[$i])) / 2;
 			while ( $j <= $#resolution ) {
 				last if ( $raw_num_pixels == ($resolution[$j][0] * $resolution[$j][1]) );
 				$j++;
 			}
 			if ( $j <= $#resolution ) {
-				print "  Image resolution (width x height): $resolution[$j][0] x $resolution[$j][1] $resolution[$j][2]\n";
+				if ( $ImageMagick_installed ) {
+					# convert rgb565 into png
+					rgb565_to_png($filename, $resolution[$j][0], $resolution[$j][1]);
+					
+					print "Image #$i written to '$filename.png'\n";
+				} else {
+					print "Image #$i written to '$filename.rgb565'\n";
+				}
+				print "  Resolution (width x height): $resolution[$j][0] x $resolution[$j][1] $resolution[$j][2]\n";
 			} else {
-				print "  Image resolution: unknown\n";
+				print "Image #$i written to '$filename.rgb565'\n";
+				print "  Resolution: unknown\n";
 			}
 			$j = 0;
 		}
 	}
 
 	print "\nSuccessfully extracted all images.\n";
+}
+
+sub rgb565_to_png {
+	my ($filename, $img_width, $img_heigth) = @_;
+	my ($raw_data, $data, $encoded);
+	my $img_resolution = $img_width . "x" . $img_heigth;
+	
+	# convert rgb565 into raw rgb (rgb888)
+	open (RGB565FILE, "$filename.rgb565") or die colored ("Error: could not open image '$filename.rgb565'", 'red') . "\n";
+	binmode (RGB565FILE);
+	while (read (RGB565FILE, $data, 2) != 0) {
+		$encoded = unpack('S', $data);
+		$raw_data .= pack('C C C', (($encoded >> 11) & 0x1F) * 255 / 31, (($encoded >> 5) & 0x3F) * 255 / 63, ($encoded & 0x1F) * 255 / 31);
+	}
+	close (RGB565FILE);
+
+	open (RAWFILE, ">$filename.raw");
+	binmode (RAWFILE);
+	print RAWFILE $raw_data or die;
+	close (RAWFILE);
+
+	# convert raw rgb (rgb888) into png
+	system ("convert -depth 8 -size $img_resolution rgb:$filename.raw $filename.png");
+
+	# cleanup
+	if (-e "$filename.png") {
+		system ("rm $filename.rgb565 | rm $filename.raw");
+	}
 }
