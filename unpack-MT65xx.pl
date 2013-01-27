@@ -29,13 +29,13 @@ use Scalar::Util qw(looks_like_number);
 use FindBin qw($Bin);
 
 my $version = "MTK-Tools by Bruno Martins\nMT65xx unpack script (last update: 27-01-2013)\n";
-my $usage = "unpack-MT65xx.pl <infile> [COMMAND ...]\n  Unpacks boot, recovery or logo image\n\nOptional COMMANDs are:\n\n  -kernel_only\n    Extract kernel only from boot or recovery image\n\n  -ramdisk_only\n    Extract ramdisk only from boot or recovery image\n\n  -force_logo_res <width> <height>\n    Forces logo image file to be unpacked by specifying image resolution,\n    which must be entered in pixels\n     (only useful when no zlib compressed images are found)\n\n";
+my $usage = "unpack-MT65xx.pl <infile> [COMMAND ...]\n  Unpacks boot, recovery or logo image\n\nOptional COMMANDs are:\n\n  -kernel_only\n    Extract kernel only from boot or recovery image\n\n  -ramdisk_only\n    Extract ramdisk only from boot or recovery image\n\n  -force_logo_res <width> <height>\n    Forces logo image file to be unpacked by specifying image resolution,\n    which must be entered in pixels\n     (only useful when no zlib compressed images are found)\n\n  -invert_logo_res\n    Invert image resolution (width <-> height)\n     (may be useful when extracted images appear to be broken)\n\n";
 
 print colored ("$version", 'bold blue') . "\n";
 die "Usage: $usage" unless $ARGV[0];
 
 if ( $ARGV[1] ) {
-	if ( $ARGV[1] eq "-kernel_only" || $ARGV[1] eq "-ramdisk_only" ) {
+	if ( $ARGV[1] eq "-kernel_only" || $ARGV[1] eq "-ramdisk_only" || $ARGV[1] eq "-invert_logo_res" ) {
 		die "Usage: $usage" unless !$ARGV[2];
 	} elsif ( $ARGV[1] eq "-force_logo_res" ) {
 		die "Usage: $usage" unless looks_like_number($ARGV[2]) && looks_like_number($ARGV[3]) && !$ARGV[4];
@@ -58,15 +58,18 @@ if ((substr($input, 0, 4) eq "\x88\x16\x88\x58") & (substr($input, 8, 4) eq "LOG
 	print "Valid logo signature found...\n";
 	if ( $ARGV[1] ) {
 		die colored ("\nError: $ARGV[1] switch can't be used with logo images", 'red') . "\n"
-			if ($ARGV[1] ne "-force_logo_res");
+			if ($ARGV[1] ne "-force_logo_res" && $ARGV[1] ne "-invert_logo_res");
+		$ARGV[1] =~ s/-//;
+		unpack_logo($input, $ARGV[1]);
+	} else {
+		unpack_logo($input, "none");
 	}
-	unpack_logo($input);
 } elsif (substr($input, 0, 7) eq "\x41\x4e\x44\x52\x4f\x49\x44") {
-	# else, a valid Android signature is found, try to unpack boot or recovery image
+	# else, if a valid Android signature is found, try to unpack boot or recovery image
 	print "Valid Android signature found...\n";
 	if ( $ARGV[1] ) {
 		die colored ("\nError: $ARGV[1] switch can't be used with boot or recovery images", 'red') . "\n"
-			if ($ARGV[1] eq "-force_logo_res");
+			if ($ARGV[1] ne "-kernel_only" && $ARGV[1] ne "-ramdisk_only");
 		$ARGV[1] =~ s/-//;
 		$ARGV[1] =~ s/_only//;
 		unpack_boot($input, $ARGV[1]);
@@ -145,7 +148,7 @@ sub unpack_boot {
 }
 
 sub unpack_logo {
-	my $logobin = $_[0];
+	my ($logobin, $switch) = @_;
 	my @resolution;
 
 	# parse logo_res.txt file if it exists
@@ -153,7 +156,11 @@ sub unpack_logo {
 		open (LOGO_RESFILE, "$Bin/logo_res.txt") or die colored ("Error: could not open file '$Bin/logo_res.txt'", 'red') . "\n";
 		while (<LOGO_RESFILE>) {
 			if ($_ =~ /^\[(\d+),(\d+),(.*)\]$/) {
-				push (@resolution, [$1, $2, $3]);
+				if ($switch eq "invert_logo_res") {
+					push (@resolution, [$2, $1, $3]);
+				} else {
+					push (@resolution, [$1, $2, $3]);
+				}
 			}
 		}
 		close (LOGO_RESFILE);
@@ -196,7 +203,7 @@ sub unpack_logo {
 
 	if ( ! $num_blocks ) {
 		die "\nNo zlib packed rgb565 images were found inside logo file." . 
-		    "\nRecheck script usage and try to use -force_logo_res switch.\n" unless $ARGV[1];
+		    "\nRecheck script usage and try to use -force_logo_res switch.\n" unless ($switch eq "force_logo_res");
 
 		# if no compressed files are found, try to unpack logo based on specified image resolution
 		my $image_file_size = ($ARGV[2] * $ARGV[3] * 2);

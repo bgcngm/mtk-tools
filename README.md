@@ -22,6 +22,10 @@ Scripts were first based on the ones available on [Android-DLS WiKi](http://andr
 	    Forces logo image file to be unpacked by specifying image resolution,
 	    which must be entered in pixels
 	     (only useful when no zlib compressed images are found)
+	
+	  -invert_logo_res
+	    Invert image resolution (width <-> height)
+	     (may be useful when extracted images appear to be broken)
 
 #### Repack script usage:
 
