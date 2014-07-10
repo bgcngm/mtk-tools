@@ -86,6 +86,8 @@ sub repack_boot {
 	# create the output file
 	if ( $^O eq "cygwin" ) {
 		system ("$Bin/mkbootimg.exe --kernel $kernel --ramdisk new-ramdisk-repack.cpio.gz -o $outfile");
+	} elsif ( $^O eq "darwin" ) {
+		system ("$Bin/mkbootimg.osx --kernel $kernel --ramdisk new-ramdisk-repack.cpio.gz -o $outfile");
 	} else {
 		system ("$Bin/mkbootimg --kernel $kernel --ramdisk new-ramdisk-repack.cpio.gz -o $outfile");
 	}
