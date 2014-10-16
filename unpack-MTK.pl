@@ -18,6 +18,7 @@
 #   - ramdisk.cpio.gz deleted after successful extraction (15-01-2013)
 #   - added rgb565 <=> png images conversion (27-01-2013)
 #   - code cleanup and revised verbose output (16-10-2014)
+#   - boot or recovery is now extracted to the working directory (16-10-2014)
 #
 
 use v5.14;
@@ -46,6 +47,7 @@ if ($ARGV[1]) {
 }
 
 my $inputfile = $ARGV[0];
+$ARGV[0] =~ s/..\///;
 
 open (INPUTFILE, "$inputfile")
 	or die_msg("couldn't open the specified file '$inputfile'!");
