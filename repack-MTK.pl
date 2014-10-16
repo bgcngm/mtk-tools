@@ -25,8 +25,8 @@ use File::Basename;
 
 my $dir = getcwd;
 
-my $version = "MTK-Tools by Bruno Martins\nMT65xx repack script (last update: 16-10-2014)\n";
-my $usage = "repack-MT65xx.pl COMMAND [...]\n\nCOMMANDs are:\n\n  -boot <kernel> <ramdisk-directory> <outfile>\n    Repacks boot image\n\n  -recovery <kernel> <ramdisk-directory> <outfile>\n    Repacks recovery image\n\n  -logo [--no_compression] <logo-directory> <outfile>\n    Repacks logo image\n\n";
+my $version = "MTK-Tools by Bruno Martins\nMTK repack script (last update: 16-10-2014)\n";
+my $usage = "repack-MTK.pl COMMAND [...]\n\nCOMMANDs are:\n\n  -boot <kernel> <ramdisk-directory> <outfile>\n    Repacks boot image\n\n  -recovery <kernel> <ramdisk-directory> <outfile>\n    Repacks recovery image\n\n  -logo [--no_compression] <logo-directory> <outfile>\n    Repacks logo image\n\n";
 
 print colored ("$version", 'bold blue') . "\n";
 die "Usage: $usage" unless $ARGV[0] && $ARGV[1] && $ARGV[2];

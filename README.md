@@ -1,5 +1,5 @@
 # MTK-Tools by Bruno Martins
-## MT65xx/MT83xx unpack and repack scripts
+## MTK unpack and repack scripts
 
 If you are looking for a way to easily unpack / repack boot.img, recovery.img or logo.bin from your MediaTek device, don't look any further. Here you can find my own Perl scripts.
 
@@ -8,13 +8,13 @@ Scripts were first based on the ones available on [Android-DLS WiKi](http://andr
 - MT65x3 (MT6513 and MT6573)
 - MT65x5 (MT6515 and MT6575)
 - MT6577
-- MT65x2 (MT6572 and MT6582)
+- MT65x2 (MT6572, MT6582 and MT6592)
 - MT6589
 - MT83xx (MT8377 and MT8389)
 
 #### Unpack script usage:
 
-	Usage: unpack-MT65xx.pl <infile> [COMMAND ...]
+	Usage: unpack-MTK.pl <infile> [COMMAND ...]
 	  Unpacks boot, recovery or logo image
 	
 	Optional COMMANDs are:
@@ -36,7 +36,7 @@ Scripts were first based on the ones available on [Android-DLS WiKi](http://andr
 
 #### Repack script usage:
 
-	Usage: repack-MT65xx.pl COMMAND [...]
+	Usage: repack-MTK.pl COMMAND [...]
 	
 	COMMANDs are:
 	
