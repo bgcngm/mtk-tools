@@ -12,6 +12,7 @@
 #   - included support for logo images containing uncompressed raw files (06-01-2013)
 #   - re-written check of needed binaries (13-01-2013)
 #   - added rgb565 <=> png images conversion (27-01-2013)
+#   - code cleanup and revised verbose output (16-10-2014)
 #
 
 use v5.14;
@@ -24,17 +25,17 @@ use File::Basename;
 
 my $dir = getcwd;
 
-my $version = "MTK-Tools by Bruno Martins\nMT65xx repack script (last update: 27-01-2013)\n";
+my $version = "MTK-Tools by Bruno Martins\nMT65xx repack script (last update: 16-10-2014)\n";
 my $usage = "repack-MT65xx.pl COMMAND [...]\n\nCOMMANDs are:\n\n  -boot <kernel> <ramdisk-directory> <outfile>\n    Repacks boot image\n\n  -recovery <kernel> <ramdisk-directory> <outfile>\n    Repacks recovery image\n\n  -logo [--no_compression] <logo-directory> <outfile>\n    Repacks logo image\n\n";
 
 print colored ("$version", 'bold blue') . "\n";
 die "Usage: $usage" unless $ARGV[0] && $ARGV[1] && $ARGV[2];
 
-if ( $ARGV[0] eq "-boot" || $ARGV[0] eq "-recovery" ) {
+if ($ARGV[0] eq "-boot" || $ARGV[0] eq "-recovery") {
 	die "Usage: $usage" unless $ARGV[3] && !$ARGV[4];
 	repack_boot();
-} elsif ( $ARGV[0] eq "-logo" ) {
-	if ( $ARGV[1] eq "--no_compression" ) {
+} elsif ($ARGV[0] eq "-logo") {
+	if ($ARGV[1] eq "--no_compression") {
 		die "Usage: $usage" unless $ARGV[2] && $ARGV[3] && !$ARGV[4];
 	} else {
 		die "Usage: $usage" unless !$ARGV[3];
@@ -50,21 +51,23 @@ sub repack_boot {
 	my ($type, $kernel, $ramdiskdir, $outfile) = @ARGV;
 	$type =~ s/^-//;
 	$ramdiskdir =~ s/\/$//;
+	my $ramdiskfile = "ramdisk-repack.cpio.gz";
 	my $signature = ($type eq "boot" ? "ROOTFS" : "RECOVERY");
 	
-	die colored ("Error: file '$kernel' not found", 'red') . "\n" unless ( -e $kernel );
-	chdir $ramdiskdir or die colored ("Error: directory '$ramdiskdir' not found", 'red') . "\n";
+	die_msg("kernel file '$kernel' not found!") unless (-e $kernel);
+	chdir $ramdiskdir or die_msg("directory '$ramdiskdir' not found!");
 
 	foreach my $tool ("find", "cpio", "gzip") {
-		die colored ("Error: $tool binary not found!", 'red') . "\n"
+		die_msg("'$tool' binary not found! Double check your environment setup.")
 			if system ("command -v $tool >/dev/null 2>&1");
 	}
 	print "Repacking $type image...\nRamdisk size: ";
-	system ("find . | cpio -o -H newc | gzip > $dir/ramdisk-repack.cpio.gz");
+	system ("find . | cpio -o -H newc | gzip > $dir/$ramdiskfile");
 
 	chdir $dir or die "\n$ramdiskdir $!";;
 
-	open (RAMDISKFILE, "ramdisk-repack.cpio.gz") or die colored ("Error: could not open ramdisk file 'ramdisk-repack.cpio.gz'", 'red') . "\n";
+	open (RAMDISKFILE, $ramdiskfile)
+		or die_msg("couldn't open ramdisk file '$ramdiskfile'!");
 	my $ramdisk;
 	while (<RAMDISKFILE>) {
 		$ramdisk .= $_;
@@ -78,25 +81,25 @@ sub repack_boot {
 	# attach the header to ramdisk
 	my $newramdisk = $header . $ramdisk;
 
-	open (RAMDISKFILE, ">new-ramdisk-repack.cpio.gz");
+	open (RAMDISKFILE, ">temp-$ramdiskfile")
+		or die_msg("couldn't create temporary ramdisk file 'temp-$ramdiskfile'!");
 	binmode (RAMDISKFILE);
 	print RAMDISKFILE $newramdisk or die;
 	close (RAMDISKFILE);
 
 	# create the output file
-	if ( $^O eq "cygwin" ) {
-		system ("$Bin/mkbootimg.exe --kernel $kernel --ramdisk new-ramdisk-repack.cpio.gz -o $outfile");
-	} elsif ( $^O eq "darwin" ) {
-		system ("$Bin/mkbootimg.osx --kernel $kernel --ramdisk new-ramdisk-repack.cpio.gz -o $outfile");
-	} else {
-		system ("$Bin/mkbootimg --kernel $kernel --ramdisk new-ramdisk-repack.cpio.gz -o $outfile");
-	}
+	my $tool = "mkbootimg" . (($^O eq "cygwin") ? ".exe" : (($^O eq "darwin") ? ".osx" : ""));
+	die_msg("couldn't execute '$tool' binary!\nCheck if file exists or its permissions.")
+		unless (-x "$Bin/$tool");
+	system ("$Bin/$tool --kernel $kernel --ramdisk temp-$ramdiskfile -o $outfile");
 
 	# cleanup
-	unlink ("ramdisk-repack.cpio.gz") or die $!;
-	system ("rm new-ramdisk-repack.cpio.gz");
+	unlink ($ramdiskfile) or die $!;
+	system ("rm temp-$ramdiskfile");
 
-	print "\nRepacked $type image into '$outfile'.\n";
+	if (-e $outfile) {
+		print colored ("\nSuccessfully repacked $type image into '$outfile'.", 'green') . "\n";
+	}
 }
 
 sub repack_logo {
@@ -108,22 +111,23 @@ sub repack_logo {
 	my $compression = ($type eq "--no_compression" ? 0 : 1);
 	my $filename = $logodir =~ s/-unpacked$//r;
 
-	chdir $logodir or die colored ("Error: directory '$logodir' not found", 'red') . "\n";
+	chdir $logodir or die_msg("directory '$logodir' not found!");
 
 	my $i = 0;
 	printf ("Repacking logo image%s...\n", $compression ? "" : " (without compression)" );
-	for my $inputfile ( glob "./$filename-img[*.*" ) {
+	for my $inputfile (glob "./$filename-img[*.*") {
 		my $extension = (fileparse($inputfile, qr/\.[^.]*/))[2];
 		$inputfile =~ s/^.\///;
 		
 		if ($extension eq ".png") {
-			die colored ("Error: ImageMagick not found!", 'red') . "\n"
+			die_msg("couldn't find 'ImageMagick' tool! Please install it and try again.")
 				if system ("command -v convert >/dev/null 2>&1");
 
 			print "Converting and packing '$inputfile'\n";
 			$raw[$i] = png_to_rgb565($inputfile);
 		} elsif ($extension eq ".rgb565") {
-			open (RGB565FILE, "$inputfile") or die colored ("Error: could not open image '$inputfile'", 'red') . "\n";
+			open (RGB565FILE, "$inputfile")
+				or die_msg("couldn't open image file '$inputfile'!");
 			my $input;
 				while (<RGB565FILE>) {
 				$input .= $_;
@@ -142,7 +146,8 @@ sub repack_logo {
 
 		$i++;
 	}
-	die colored ("Error: could not find any .png or .rgb565 file under the specified directory '$logodir'", 'red') . "\n" unless $i > 0;
+	die_msg("couldn't find any .png or .rgb565 file under the specified directory '$logodir'!")
+		unless $i > 0;
 
 	chdir $dir or die "\n$logodir $!";;
 
@@ -178,12 +183,15 @@ sub repack_logo {
 	$logobin = $logo_header . $logobin;
 
 	# create the output file
-	open (LOGOFILE, ">$outfile");
+	open (LOGOFILE, ">$outfile")
+		or die_msg("couldn't create output file '$outfile'!");
 	binmode (LOGOFILE);
 	print LOGOFILE $logobin or die;
 	close (LOGOFILE);
 
-	print "\nRepacked logo image into '$outfile'.\n";
+	if (-e $outfile) {
+		print colored ("\nSuccessfully repacked logo image into '$outfile'.", 'green') . "\n";
+	}
 }
 
 sub gen_header {
@@ -200,7 +208,8 @@ sub png_to_rgb565 {
 	system ("convert -depth 8 $filename.png rgb:$filename.raw");
 
 	# convert raw rgb (rgb888) into rgb565
-	open (RAWFILE, "$filename.raw") or die colored ("Error: could not open image '$filename.raw'", 'red') . "\n";
+	open (RAWFILE, "$filename.raw")
+		or die_msg("couldn't open temporary image file '$filename.raw'!");
 	binmode (RAWFILE);
 	while (read (RAWFILE, $data, 3) != 0) {
 		@encoded = unpack('C3', $data);
@@ -213,3 +222,8 @@ sub png_to_rgb565 {
 
 	return $rgb565_data;
 }
+
+sub die_msg {
+	die colored ("\nError: $_[0]", 'red') . "\n";
+}
+
