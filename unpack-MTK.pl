@@ -19,18 +19,20 @@
 #   - added rgb565 <=> png images conversion (27-01-2013)
 #   - code cleanup and revised verbose output (16-10-2014)
 #   - boot or recovery is now extracted to the working directory (16-10-2014)
+#   - unpack result is stored on the working directory, despite of the input file path (17-10-2014)
 #
 
 use v5.14;
 use warnings;
 use bytes;
 use File::Path;
+use File::Basename;
 use Compress::Zlib;
 use Term::ANSIColor;
 use Scalar::Util qw(looks_like_number);
 use FindBin qw($Bin);
 
-my $version = "MTK-Tools by Bruno Martins\nMTK unpack script (last update: 16-10-2014)\n";
+my $version = "MTK-Tools by Bruno Martins\nMTK unpack script (last update: 17-10-2014)\n";
 my $usage = "unpack-MTK.pl <infile> [COMMAND ...]\n  Unpacks MediaTek boot, recovery or logo image\n\nOptional COMMANDs are:\n\n  -kernel_only\n    Extract kernel only from boot or recovery image\n\n  -ramdisk_only\n    Extract ramdisk only from boot or recovery image\n\n  -force_logo_res <width> <height>\n    Forces logo image file to be unpacked by specifying image resolution,\n    which must be entered in pixels\n     (only useful when no zlib compressed images are found)\n\n  -invert_logo_res\n    Invert image resolution (width <-> height)\n     (may be useful when extracted images appear to be broken)\n\n";
 
 print colored ("$version", 'bold blue') . "\n";
@@ -47,7 +49,7 @@ if ($ARGV[1]) {
 }
 
 my $inputfile = $ARGV[0];
-$ARGV[0] =~ s/..\///;
+my $inputFilename = fileparse($inputfile);
 
 open (INPUTFILE, "$inputfile")
 	or die_msg("couldn't open the specified file '$inputfile'!");
@@ -103,13 +105,13 @@ sub unpack_boot {
 	if ($extract =~ /kernel/) {
 		my $kernel = substr($bootimg, $pageSize, $kernelSize);
 
-		open (KERNELFILE, ">$ARGV[0]-kernel.img")
-			or die_msg("couldn't create file '$ARGV[0]-kernel.img'!");
+		open (KERNELFILE, ">$inputFilename-kernel.img")
+			or die_msg("couldn't create file '$inputFilename-kernel.img'!");
 		binmode (KERNELFILE);
 		print KERNELFILE $kernel or die;
 		close (KERNELFILE);
 
-		print "Kernel written to '$ARGV[0]-kernel.img'\n";
+		print "Kernel written to '$inputFilename-kernel.img'\n";
 		$unpack_sucess = 1;
 	}
 
@@ -127,28 +129,28 @@ sub unpack_boot {
 			die_msg("the specified boot image does not appear to contain a valid gzip file!");
 		}
 
-		open (RAMDISKFILE, ">$ARGV[0]-ramdisk.cpio.gz")
-			or die_msg("couldn't create file '$ARGV[0]-ramdisk.cpio.gz'!");
+		open (RAMDISKFILE, ">$inputFilename-ramdisk.cpio.gz")
+			or die_msg("couldn't create file '$inputFilename-ramdisk.cpio.gz'!");
 		binmode (RAMDISKFILE);
 		print RAMDISKFILE $ram1 or die;
 		close (RAMDISKFILE);
 
-		if (-e "$ARGV[0]-ramdisk") {
-			rmtree "$ARGV[0]-ramdisk";
-			print "Removed old ramdisk directory '$ARGV[0]-ramdisk'\n";
+		if (-e "$inputFilename-ramdisk") {
+			rmtree "$inputFilename-ramdisk";
+			print "Removed old ramdisk directory '$inputFilename-ramdisk'\n";
 		}
 
-		mkdir "$ARGV[0]-ramdisk" or die;
-		chdir "$ARGV[0]-ramdisk" or die;
+		mkdir "$inputFilename-ramdisk" or die;
+		chdir "$inputFilename-ramdisk" or die;
 		foreach my $tool ("gzip", "cpio") {
 			die_msg("'$tool' binary not found! Double check your environment setup.")
 				if system ("command -v $tool >/dev/null 2>&1");
 		}
 		print "Ramdisk size: ";
-		system ("gzip -d -c ../$ARGV[0]-ramdisk.cpio.gz | cpio -i");
-		system ("rm ../$ARGV[0]-ramdisk.cpio.gz");
+		system ("gzip -d -c ../$inputFilename-ramdisk.cpio.gz | cpio -i");
+		system ("rm ../$inputFilename-ramdisk.cpio.gz");
 
-		print "Extracted ramdisk contents to directory '$ARGV[0]-ramdisk'\n";
+		print "Extracted ramdisk contents to directory '$inputFilename-ramdisk'\n";
 		$unpack_sucess = 1;
 	}
 
@@ -200,14 +202,14 @@ sub unpack_logo {
 		die_msg("the specified logo image file seems to be corrupted!");
 	}
 
-	if (-e "$ARGV[0]-unpacked") {
-		rmtree "$ARGV[0]-unpacked";
-		print "\nRemoved old unpacked logo directory '$ARGV[0]-unpacked'";
+	if (-e "$inputFilename-unpacked") {
+		rmtree "$inputFilename-unpacked";
+		print "\nRemoved old unpacked logo directory '$inputFilename-unpacked'";
 	}
 
-	mkdir "$ARGV[0]-unpacked" or die;
-	chdir "$ARGV[0]-unpacked" or die;
-	print "\nExtracting images to directory '$ARGV[0]-unpacked'\n";
+	mkdir "$inputFilename-unpacked" or die;
+	chdir "$inputFilename-unpacked" or die;
+	print "\nExtracting images to directory '$inputFilename-unpacked'\n";
 
 	# get the number of packed rgb565 images
 	my $num_blocks = unpack('V', $logo);
@@ -223,7 +225,7 @@ sub unpack_logo {
 		print "\nNumber of uncompressed images found (based on specified resolution): $num_blocks\n";
 		
 		for my $i (0 .. $num_blocks - 1) {
-			my $filename = sprintf ("%s-img[%02d]", $ARGV[0], $i);
+			my $filename = sprintf ("%s-img[%02d]", $inputFilename, $i);
 
 			open (RGB565FILE, ">$filename.rgb565")
 				or die_msg("couldn't create image file '$filename.rgb565'!");
@@ -255,7 +257,7 @@ sub unpack_logo {
 			} else {
 				$zlib_raw[$i] = substr($logo, $raw_addr[$i]);
 			}
-			my $filename = sprintf ("%s-img[%02d]", $ARGV[0], $i);
+			my $filename = sprintf ("%s-img[%02d]", $inputFilename, $i);
 
 			open (RGB565FILE, ">$filename.rgb565")
 				or die_msg("couldn't create image file '$filename.rgb565'!");
