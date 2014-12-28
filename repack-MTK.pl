@@ -25,7 +25,7 @@ use File::Basename;
 
 my $dir = getcwd;
 
-my $version = "MTK-Tools by Bruno Martins\nMTK repack script (last update: 16-10-2014)\n";
+my $version = "MTK-Tools by Bruno Martins\nMTK repack script (last update: 28-12-2014)\n";
 my $usage = "repack-MTK.pl COMMAND [...]\n\nCOMMANDs are:\n\n  -boot <kernel> <ramdisk-directory> <outfile>\n    Repacks boot image\n\n  -recovery <kernel> <ramdisk-directory> <outfile>\n    Repacks recovery image\n\n  -logo [--no_compression] <logo-directory> <outfile>\n    Repacks logo image\n\n";
 
 print colored ("$version", 'bold blue') . "\n";
@@ -86,12 +86,22 @@ sub repack_boot {
 	binmode (RAMDISKFILE);
 	print RAMDISKFILE $newramdisk or die;
 	close (RAMDISKFILE);
+	
+	my $argsfile = "$type.img-Args.txt";
+	open(ARGSFILE, $argsfile)
+	    or die "Could not open file '$argsfile'!";
+	my $extrargs;	 
+	while (my $row = <ARGSFILE>) {
+	chomp $row;
+	   $extrargs = $row;
+	}
+	close (ARGSFILE);
 
 	# create the output file
 	my $tool = "mkbootimg" . (($^O eq "cygwin") ? ".exe" : (($^O eq "darwin") ? ".osx" : ""));
 	die_msg("couldn't execute '$tool' binary!\nCheck if file exists or its permissions.")
 		unless (-x "$Bin/$tool");
-	system ("$Bin/$tool --kernel $kernel --ramdisk temp-$ramdiskfile -o $outfile");
+	system ("$Bin/$tool --kernel $kernel --ramdisk temp-$ramdiskfile $extrargs -o $outfile");
 
 	# cleanup
 	unlink ($ramdiskfile) or die $!;
