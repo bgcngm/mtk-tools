@@ -32,7 +32,7 @@ use Term::ANSIColor;
 use Scalar::Util qw(looks_like_number);
 use FindBin qw($Bin);
 
-my $version = "MTK-Tools by Bruno Martins\nMTK unpack script (last update: 17-10-2014)\n";
+my $version = "MTK-Tools by Bruno Martins\nMTK unpack script (last update: 28-12-2014)\n";
 my $usage = "unpack-MTK.pl <infile> [COMMAND ...]\n  Unpacks MediaTek boot, recovery or logo image\n\nOptional COMMANDs are:\n\n  -kernel_only\n    Extract kernel only from boot or recovery image\n\n  -ramdisk_only\n    Extract ramdisk only from boot or recovery image\n\n  -force_logo_res <width> <height>\n    Forces logo image file to be unpacked by specifying image resolution,\n    which must be entered in pixels\n     (only useful when no zlib compressed images are found)\n\n  -invert_logo_res\n    Invert image resolution (width <-> height)\n     (may be useful when extracted images appear to be broken)\n\n";
 
 print colored ("$version", 'bold blue') . "\n";
@@ -89,18 +89,37 @@ if ((substr($input, 0, 4) eq "\x88\x16\x88\x58") & (substr($input, 8, 4) eq "LOG
 sub unpack_boot {
 	my ($bootimg, $extract) = @_;
 	my ($bootMagic, $kernelSize, $kernelLoadAddr, $ram1Size, $ram1LoadAddr, $ram2Size, $ram2LoadAddr, $tagsAddr, $pageSize, $unused1, $unused2, $bootName, $cmdLine, $id) = unpack('a8 L L L L L L L L L L a16 a512 a8', $bootimg);
+	my $baseAddr = $kernelLoadAddr - 0x00008000;
+	my $Base = sprintf("0x%08x", $baseAddr);
+	my $kernelOffset = $kernelLoadAddr - $baseAddr;
+	my $K_Offset = sprintf("0x%08x", $kernelOffset);
+	my $ramdisk1Offset = $ram1LoadAddr - $baseAddr;
+	my $R1_Offset = sprintf("0x%08x", $ramdisk1Offset);
+	my $ramdisk2Offset = $ram2LoadAddr - $baseAddr;
+	my $R2_Offset = sprintf("0x%08x", $ramdisk2Offset);
+	my $tagsOffset = $tagsAddr - $baseAddr;
+	my $T_Offset = sprintf("0x%08x", $tagsOffset);
 	my $unpack_sucess = 0;
 
 	# print input file information
-	print colored ("\nInput file information:\n", 'yellow') . "\n";
+	print colored ("\nInput file information:\n", 'cyan') . "\n";
+	print " Base: $Base\n";
 	print " Kernel size: $kernelSize bytes / ";
-	printf ("load address: %#x\n", $kernelLoadAddr);
+	printf ("load address: 0x%08x\n", $kernelLoadAddr);
+	print " Kernel Offset: $K_Offset\n";
 	print " Ramdisk size: $ram1Size bytes / ";
-	printf ("load address: %#x\n", $ram1LoadAddr);
+	printf ("load address: 0x%08x\n", $ram1LoadAddr);
+	print " Ramdisk Offset: $R1_Offset\n";
 	print " Second stage size: $ram2Size bytes / ";
-	printf ("load address: %#x\n", $ram2LoadAddr);
+	printf ("load address: 0x%08x\n", $ram2LoadAddr);
+	print " Second Offset: $R2_Offset\n";
+	print " Tags Offset: $T_Offset\n";
 	print " Page size: $pageSize bytes\n ASCIIZ product name: '$bootName'\n";
 	printf (" Command line: %s\n\n", substr($cmdLine, 0, 2) eq "\x00\x00" ? "(none)" : $cmdLine );
+	open (ARGSFILE, ">$inputFilename-Args.txt")
+			or die_msg("couldn't create file '$inputFilename-Args.txt'!");
+	print ARGSFILE "--base $Base --pagesize $pageSize --kernel_offset $K_Offset --ramdisk_offset $R1_Offset --second_offset $R2_Offset --tags_offset $T_Offset" or die;
+	print "Extra Arguments written to '$inputFilename-Args.txt'\n";
 
 	if ($extract =~ /kernel/) {
 		my $kernel = substr($bootimg, $pageSize, $kernelSize);
@@ -190,7 +209,7 @@ sub unpack_logo {
 	# (it may happen if logo image was created with a backup tool and contains trailing zeros)
 	my $sizelogobin = -s $inputfile;
 	if ($logo_length != $sizelogobin - 512) {
-		print colored ("Warning: unexpected logo image file size! Trying to unpack it anyway...", 'yellow') . "\n";
+		print colored ("Warning: unexpected logo image file size! Trying to unpack it anyway...", 'red') . "\n";
 	}
 
 	# chop the header and any eventual garbage found at the EOF
