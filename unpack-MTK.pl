@@ -21,6 +21,7 @@
 #   - boot or recovery is now extracted to the working directory (16-10-2014)
 #   - unpack result is stored on the working directory, despite of the input file path (17-10-2014)
 #   - added support for new platforms - MT6595 (thanks to carliv@XDA) (29-12-2014)
+#   - code cleanup and revised information output for boot and recovery images (29-12-2014)
 #
 
 use v5.14;
@@ -34,13 +35,16 @@ use Scalar::Util qw(looks_like_number);
 use FindBin qw($Bin);
 
 my $version = "MTK-Tools by Bruno Martins\nMTK unpack script (last update: 29-12-2014)\n";
-my $usage = "unpack-MTK.pl <infile> [COMMAND ...]\n  Unpacks MediaTek boot, recovery or logo image\n\nOptional COMMANDs are:\n\n  -kernel_only\n    Extract kernel only from boot or recovery image\n\n  -ramdisk_only\n    Extract ramdisk only from boot or recovery image\n\n  -force_logo_res <width> <height>\n    Forces logo image file to be unpacked by specifying image resolution,\n    which must be entered in pixels\n     (only useful when no zlib compressed images are found)\n\n  -invert_logo_res\n    Invert image resolution (width <-> height)\n     (may be useful when extracted images appear to be broken)\n\n";
+my $usageMain = "unpack-MTK.pl <infile> [COMMAND ...]\n  Unpacks MediaTek boot, recovery or logo images\n\nOptional COMMANDs are:\n\n";
+my $usageBootOpts =  "  -info_only\n    Display boot or recovery image information only\n     (useful to check image information without unpacking)\n\n  -kernel_only\n    Extract kernel only from boot or recovery image\n\n  -ramdisk_only\n    Extract ramdisk only from boot or recovery image\n\n";
+my $usageLogoOpts =  "  -force_logo_res <width> <height>\n    Forces logo image file to be unpacked by specifying image resolution,\n    which must be entered in pixels\n     (only useful when no zlib compressed images are found)\n\n  -invert_logo_res\n    Invert image resolution (width <-> height)\n     (may be useful when extracted images appear to be broken)\n\n";
+my $usage = $usageMain . $usageBootOpts . $usageLogoOpts;
 
 print colored ("$version", 'bold blue') . "\n";
 die "Usage: $usage" unless $ARGV[0];
 
 if ($ARGV[1]) {
-	if ($ARGV[1] eq "-kernel_only" || $ARGV[1] eq "-ramdisk_only" || $ARGV[1] eq "-invert_logo_res") {
+	if ($ARGV[1] eq "-info_only" || $ARGV[1] eq "-kernel_only" || $ARGV[1] eq "-ramdisk_only" || $ARGV[1] eq "-invert_logo_res") {
 		die "Usage: $usage" unless !$ARGV[2];
 	} elsif ($ARGV[1] eq "-force_logo_res") {
 		die "Usage: $usage" unless (looks_like_number($ARGV[2]) && looks_like_number($ARGV[3]) && !$ARGV[4]);
@@ -71,12 +75,12 @@ if ((substr($input, 0, 4) eq "\x88\x16\x88\x58") & (substr($input, 8, 4) eq "LOG
 	} else {
 		unpack_logo($input, "none");
 	}
-} elsif (substr($input, 0, 7) eq "\x41\x4e\x44\x52\x4f\x49\x44") {
+} elsif (substr($input, 0, 8) eq "ANDROID!") {
 	# else, if a valid Android signature is found, try to unpack boot or recovery image
 	print "Valid Android signature found...\n";
 	if ($ARGV[1]) {
 		die_msg("$ARGV[1] switch can't be used with boot or recovery images!")
-			if ($ARGV[1] ne "-kernel_only" && $ARGV[1] ne "-ramdisk_only");
+			if ($ARGV[1] ne "-info_only" && $ARGV[1] ne "-kernel_only" && $ARGV[1] ne "-ramdisk_only");
 		$ARGV[1] =~ s/-//;
 		$ARGV[1] =~ s/_only//;
 		unpack_boot($input, $ARGV[1]);
@@ -89,7 +93,8 @@ if ((substr($input, 0, 4) eq "\x88\x16\x88\x58") & (substr($input, 8, 4) eq "LOG
 
 sub unpack_boot {
 	my ($bootimg, $extract) = @_;
-	my ($bootMagic, $kernelSize, $kernelLoadAddr, $ram1Size, $ram1LoadAddr, $ram2Size, $ram2LoadAddr, $tagsAddr, $pageSize, $unused1, $unused2, $bootName, $cmdLine, $id) = unpack('a8 L L L L L L L L L L a16 a512 a8', $bootimg);
+	my ($bootMagic, $kernelSize, $kernelLoadAddr, $ram1Size, $ram1LoadAddr, $ram2Size, $ram2LoadAddr, $tagsAddr, $pageSize, $unused1, $unused2, $bootName, $cmdLine, $id) = unpack('a8 L L L L L L L L L L a16 a512 a20', $bootimg);
+	my $magicAddr = 0x00000000;
 	my $baseAddr = $kernelLoadAddr - 0x00008000;
 	my $kernelOffset = $kernelLoadAddr - $baseAddr;
 	my $ram1Offset = $ram1LoadAddr - $baseAddr;
@@ -99,21 +104,35 @@ sub unpack_boot {
 
 	# print input file information
 	print colored ("\nInput file information:\n", 'cyan') . "\n";
-	printf (" Base address: %#x\n", $baseAddr);
-	print " Kernel size: $kernelSize bytes\n";
-	printf (" Kernel load address: %#.8x / offset: %#.8x\n", $kernelLoadAddr, $kernelOffset);
-	print " Ramdisk size: $ram1Size bytes\n";
-	printf (" Ramdisk load address: %#.8x / offset: %#.8x\n", $ram1LoadAddr, $ram1Offset);
-	print " Second stage size: $ram2Size bytes\n";
-	printf (" Second stage load address: %#.8x / offset: %#.8x\n", $ram2LoadAddr, $ram2Offset);
-	printf (" Tags offset: %#.8x\n", $tagsOffset);
-	print " Page size: $pageSize bytes\n ASCIIZ product name: '$bootName'\n";
-	printf (" Command line: %s\n\n", substr($cmdLine, 0, 2) eq "\x00\x00" ? "(none)" : $cmdLine );
+	print colored (" Header:\n", 'cyan') . "\n";
+	printf ("  Boot magic:\t\t\t%s\n", $bootMagic);
+	printf ("  Kernel size (bytes):\t\t%d\t\t(0x%.8x)\n", $kernelSize, $kernelSize);
+	printf ("  Kernel load address:\t\t0x%.8x\n\n", $kernelLoadAddr);
+	printf ("  Ramdisk size (bytes):\t\t%d\t\t(0x%.8x)\n", $ram1Size, $ram1Size);
+	printf ("  Ramdisk load address:\t\t0x%.8x\n", $ram1LoadAddr);
+	printf ("  Second stage size (bytes):\t%d\t\t(0x%.8x)\n", $ram2Size, $ram2Size);
+	printf ("  Second stage load address:\t0x%.8x\n\n", $ram2LoadAddr);
+	printf ("  Tags address:\t\t\t0x%.8x\n", $tagsAddr);
+	printf ("  Page size (bytes):\t\t%d\t\t(0x%.8x)\n", $pageSize, $pageSize);
+	printf ("  ASCIIZ product name:\t\t'%s'\n", $bootName);
+	printf ("  Command line:\t\t\t'%s'\n", $cmdLine);
+	printf ("  ID:\t\t\t\t%s\n\n", unpack('H*', $id));
+	print colored (" Other:\n", 'cyan') . "\n";
+	printf ("  Boot magic offset:\t\t0x%.8x\n", $magicAddr);
+	printf ("  Base address:\t\t\t0x%.8x\n\n", $baseAddr);
+	printf ("  Kernel offset:\t\t0x%.8x\n", $kernelOffset);
+	printf ("  Ramdisk offset:\t\t0x%.8x\n", $ram1Offset);
+	printf ("  Second stage offset:\t\t0x%.8x\n", $ram2Offset);
+	printf ("  Tags offset:\t\t\t0x%.8x\n\n", $tagsOffset);
 
 	open (ARGSFILE, ">$inputFilename-args.txt")
 		or die_msg("couldn't create file '$inputFilename-args.txt'!");
 	printf ARGSFILE ("--base %#.8x --pagesize %d --kernel_offset %#.8x --ramdisk_offset %#.8x --second_offset %#.8x --tags_offset %#.8x", $baseAddr, $pageSize, $kernelOffset, $ram1Offset, $ram2Offset, $tagsOffset) or die;
 	print "Extra arguments written to '$inputFilename-args.txt'\n";
+
+	if ($extract =~ /info/) {
+		print colored ("\nSuccessfully printed input file information.", 'green') . "\n";
+	}
 
 	if ($extract =~ /kernel/) {
 		my $kernel = substr($bootimg, $pageSize, $kernelSize);

@@ -20,6 +20,10 @@ Scripts were first based on the ones available on [Android-DLS WiKi](http://andr
 	
 	Optional COMMANDs are:
 	
+	  -info_only
+	    Display boot or recovery image information only
+	     (useful to check image information without unpacking)
+	
 	  -kernel_only
 	    Extract kernel only from boot or recovery image
 	
@@ -37,17 +41,17 @@ Scripts were first based on the ones available on [Android-DLS WiKi](http://andr
 
 #### Repack script usage:
 
-	Usage: repack-MTK.pl COMMAND [...]
+	Usage: repack-MTK.pl <COMMAND ...> <outfile>
 	
 	COMMANDs are:
 	
-	  -boot <kernel> <ramdisk-directory> <outfile>
+	  -boot <kernel> <ramdisk-directory>
 	    Repacks boot image
 	
-	  -recovery <kernel> <ramdisk-directory> <outfile>
+	  -recovery <kernel> <ramdisk-directory>
 	    Repacks recovery image
 	
-	  -logo [--no_compression] <logo-directory> <outfile>
+	  -logo [--no_compression] <logo-directory>
 	    Repacks logo image
 
 #### Credits:

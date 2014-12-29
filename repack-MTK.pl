@@ -14,6 +14,7 @@
 #   - added rgb565 <=> png images conversion (27-01-2013)
 #   - code cleanup and revised verbose output (16-10-2014)
 #   - added support for new platforms - MT6595 (thanks to carliv@XDA) (29-12-2014)
+#   - minor code cleanup (29-12-2014)
 #
 
 use v5.14;
@@ -27,7 +28,10 @@ use File::Basename;
 my $dir = getcwd;
 
 my $version = "MTK-Tools by Bruno Martins\nMTK repack script (last update: 29-12-2014)\n";
-my $usage = "repack-MTK.pl COMMAND [...]\n\nCOMMANDs are:\n\n  -boot <kernel> <ramdisk-directory> <outfile>\n    Repacks boot image\n\n  -recovery <kernel> <ramdisk-directory> <outfile>\n    Repacks recovery image\n\n  -logo [--no_compression] <logo-directory> <outfile>\n    Repacks logo image\n\n";
+my $usageMain = "repack-MTK.pl <COMMAND ...> <outfile>\n\nCOMMANDs are:\n\n";
+my $usageBootOpts =  "  -boot <kernel> <ramdisk-directory>\n    Repacks boot image\n\n  -recovery <kernel> <ramdisk-directory>\n    Repacks recovery image\n\n";
+my $usageLogoOpts =  "  -logo [--no_compression] <logo-directory>\n    Repacks logo image\n\n";
+my $usage = $usageMain . $usageBootOpts . $usageLogoOpts;
 
 print colored ("$version", 'bold blue') . "\n";
 die "Usage: $usage" unless $ARGV[0] && $ARGV[1] && $ARGV[2];
