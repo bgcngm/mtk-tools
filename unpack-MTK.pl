@@ -1,9 +1,9 @@
 #!/usr/bin/perl
 
 #
-# script from Android-DLS WiKi
+# Initial script from Android-DLS WiKi
 #
-# changes by Bruno Martins:
+# Change history:
 #   - modified to work with MT6516 boot and recovery images (17-03-2011)
 #   - included support for MT65x3 and eliminated the need of header files (16-10-2011)
 #   - included support for MT65xx logo images (31-07-2012)
@@ -20,6 +20,7 @@
 #   - code cleanup and revised verbose output (16-10-2014)
 #   - boot or recovery is now extracted to the working directory (16-10-2014)
 #   - unpack result is stored on the working directory, despite of the input file path (17-10-2014)
+#   - added support for new platforms - MT6595 (thanks to carliv@XDA) (29-12-2014)
 #
 
 use v5.14;
@@ -32,7 +33,7 @@ use Term::ANSIColor;
 use Scalar::Util qw(looks_like_number);
 use FindBin qw($Bin);
 
-my $version = "MTK-Tools by Bruno Martins\nMTK unpack script (last update: 17-10-2014)\n";
+my $version = "MTK-Tools by Bruno Martins\nMTK unpack script (last update: 29-12-2014)\n";
 my $usage = "unpack-MTK.pl <infile> [COMMAND ...]\n  Unpacks MediaTek boot, recovery or logo image\n\nOptional COMMANDs are:\n\n  -kernel_only\n    Extract kernel only from boot or recovery image\n\n  -ramdisk_only\n    Extract ramdisk only from boot or recovery image\n\n  -force_logo_res <width> <height>\n    Forces logo image file to be unpacked by specifying image resolution,\n    which must be entered in pixels\n     (only useful when no zlib compressed images are found)\n\n  -invert_logo_res\n    Invert image resolution (width <-> height)\n     (may be useful when extracted images appear to be broken)\n\n";
 
 print colored ("$version", 'bold blue') . "\n";
@@ -89,18 +90,30 @@ if ((substr($input, 0, 4) eq "\x88\x16\x88\x58") & (substr($input, 8, 4) eq "LOG
 sub unpack_boot {
 	my ($bootimg, $extract) = @_;
 	my ($bootMagic, $kernelSize, $kernelLoadAddr, $ram1Size, $ram1LoadAddr, $ram2Size, $ram2LoadAddr, $tagsAddr, $pageSize, $unused1, $unused2, $bootName, $cmdLine, $id) = unpack('a8 L L L L L L L L L L a16 a512 a8', $bootimg);
+	my $baseAddr = $kernelLoadAddr - 0x00008000;
+	my $kernelOffset = $kernelLoadAddr - $baseAddr;
+	my $ram1Offset = $ram1LoadAddr - $baseAddr;
+	my $ram2Offset = $ram2LoadAddr - $baseAddr;
+	my $tagsOffset = $tagsAddr - $baseAddr;
 	my $unpack_sucess = 0;
 
 	# print input file information
-	print colored ("\nInput file information:\n", 'yellow') . "\n";
-	print " Kernel size: $kernelSize bytes / ";
-	printf ("load address: %#x\n", $kernelLoadAddr);
-	print " Ramdisk size: $ram1Size bytes / ";
-	printf ("load address: %#x\n", $ram1LoadAddr);
-	print " Second stage size: $ram2Size bytes / ";
-	printf ("load address: %#x\n", $ram2LoadAddr);
+	print colored ("\nInput file information:\n", 'cyan') . "\n";
+	printf (" Base address: %#x\n", $baseAddr);
+	print " Kernel size: $kernelSize bytes\n";
+	printf (" Kernel load address: %#.8x / offset: %#.8x\n", $kernelLoadAddr, $kernelOffset);
+	print " Ramdisk size: $ram1Size bytes\n";
+	printf (" Ramdisk load address: %#.8x / offset: %#.8x\n", $ram1LoadAddr, $ram1Offset);
+	print " Second stage size: $ram2Size bytes\n";
+	printf (" Second stage load address: %#.8x / offset: %#.8x\n", $ram2LoadAddr, $ram2Offset);
+	printf (" Tags offset: %#.8x\n", $tagsOffset);
 	print " Page size: $pageSize bytes\n ASCIIZ product name: '$bootName'\n";
 	printf (" Command line: %s\n\n", substr($cmdLine, 0, 2) eq "\x00\x00" ? "(none)" : $cmdLine );
+
+	open (ARGSFILE, ">$inputFilename-args.txt")
+		or die_msg("couldn't create file '$inputFilename-args.txt'!");
+	printf ARGSFILE ("--base %#.8x --pagesize %d --kernel_offset %#.8x --ramdisk_offset %#.8x --second_offset %#.8x --tags_offset %#.8x", $baseAddr, $pageSize, $kernelOffset, $ram1Offset, $ram2Offset, $tagsOffset) or die;
+	print "Extra arguments written to '$inputFilename-args.txt'\n";
 
 	if ($extract =~ /kernel/) {
 		my $kernel = substr($bootimg, $pageSize, $kernelSize);

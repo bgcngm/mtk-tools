@@ -11,6 +11,7 @@ Scripts were first based on the ones available on [Android-DLS WiKi](http://andr
 - MT65x2 (MT6572, MT6582 and MT6592)
 - MT6589
 - MT83xx (MT8377 and MT8389)
+- MT6595
 
 #### Unpack script usage:
 
@@ -53,6 +54,7 @@ Scripts were first based on the ones available on [Android-DLS WiKi](http://andr
 
 - **Android-DLS** for the initial scripts
 - **starix** (from forum.china-iphone.ru) for the decryption of logo.bin files structure
+- **carliv** (from forum.xda-developers.com) for new platform support and new binaries
 
 #### Support page:
 
