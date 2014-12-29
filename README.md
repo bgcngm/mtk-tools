@@ -39,6 +39,38 @@ Scripts were first based on the ones available on [Android-DLS WiKi](http://andr
 	    Invert image resolution (width <-> height)
 	     (may be useful when extracted images appear to be broken)
 
+- Note: for the new platforms requirements, the unpack script will now display the complete information about input image (example shown bellow) and also create an extra file with arguments needed for further repacking.
+```
+Input file information (example):
+
+ Header:
+
+  Boot magic:                   ANDROID!
+  Kernel size (bytes):          3436480         (0x00346fc0)
+  Kernel load address:          0x10008000
+
+  Ramdisk size (bytes):         1989254         (0x001e5a86)
+  Ramdisk load address:         0x11000000
+  Second stage size (bytes):    0               (0x00000000)
+  Second stage load address:    0x10f00000
+
+  Tags address:                 0x10000100
+  Page size (bytes):            2048            (0x00000800)
+  ASCIIZ product name:          ''
+  Command line:                 ''
+  ID:                           727cb3e6a37d7973d94f5061a4fb6169a8c4da77
+
+ Other:
+
+  Boot magic offset:            0x00000000
+  Base address:                 0x10000000
+
+  Kernel offset:                0x00008000
+  Ramdisk offset:               0x01000000
+  Second stage offset:          0x00f00000
+  Tags offset:                  0x00000100
+```
+
 #### Repack script usage:
 
 	Usage: repack-MTK.pl <COMMAND ...> <outfile>
@@ -54,6 +86,8 @@ Scripts were first based on the ones available on [Android-DLS WiKi](http://andr
 	  -logo [--no_compression] <logo-directory>
 	    Repacks logo image
 
+- Note: for the new platforms requirements, repack script now requires the extra file with arguments created when unpacking.
+
 #### Credits:
 
 - **Android-DLS** for the initial scripts
@@ -62,7 +96,7 @@ Scripts were first based on the ones available on [Android-DLS WiKi](http://andr
 
 #### Support page:
 
-Visit the [support page](http://forum.xda-developers.com/showthread.php?t=1587411) for any questions or comments. Please don't forget to hit "Thanks" button.
+Visit the [support page](http://forum.xda-developers.com/showthread.php?t=1587411) for any questions or comments. Please don't just leech the files and go away. You can easily say thanks just by pressing "Thanks" button on XDA-Developers forum.
 
 #### Copyright:
 
