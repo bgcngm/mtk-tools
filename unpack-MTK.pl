@@ -22,6 +22,7 @@
 #   - unpack result is stored on the working directory, despite of the input file path (17-10-2014)
 #   - added support for new platforms - MT6595 (thanks to carliv@XDA) (29-12-2014)
 #   - code cleanup and revised information output for boot and recovery images (29-12-2014)
+#   - make scripts more future-proof by supporting even more args (30-12-2014)
 #
 
 use v5.14;
@@ -34,7 +35,7 @@ use Term::ANSIColor;
 use Scalar::Util qw(looks_like_number);
 use FindBin qw($Bin);
 
-my $version = "MTK-Tools by Bruno Martins\nMTK unpack script (last update: 29-12-2014)\n";
+my $version = "MTK-Tools by Bruno Martins\nMTK unpack script (last update: 30-12-2014)\n";
 my $usageMain = "unpack-MTK.pl <infile> [COMMAND ...]\n  Unpacks MediaTek boot, recovery or logo images\n\nOptional COMMANDs are:\n\n";
 my $usageBootOpts =  "  -info_only\n    Display boot or recovery image information only\n     (useful to check image information without unpacking)\n\n  -kernel_only\n    Extract kernel only from boot or recovery image\n\n  -ramdisk_only\n    Extract ramdisk only from boot or recovery image\n\n";
 my $usageLogoOpts =  "  -force_logo_res <width> <height>\n    Forces logo image file to be unpacked by specifying image resolution,\n    which must be entered in pixels\n     (only useful when no zlib compressed images are found)\n\n  -invert_logo_res\n    Invert image resolution (width <-> height)\n     (may be useful when extracted images appear to be broken)\n\n";
@@ -102,6 +103,10 @@ sub unpack_boot {
 	my $tagsOffset = $tagsAddr - $baseAddr;
 	my $unpack_sucess = 0;
 
+	# remove trailing zeros from board and cmdline
+	$bootName =~ s/\x00+$//;
+	$cmdLine =~ s/\x00+$//;
+
 	# print input file information
 	print colored ("\nInput file information:\n", 'cyan') . "\n";
 	print colored (" Header:\n", 'cyan') . "\n";
@@ -125,14 +130,16 @@ sub unpack_boot {
 	printf ("  Second stage offset:\t\t0x%.8x\n", $ram2Offset);
 	printf ("  Tags offset:\t\t\t0x%.8x\n\n", $tagsOffset);
 
+	if ($extract eq "info") {
+		die colored ("Successfully displayed input file information.", 'green') . "\n";
+	}
+
+	# create file containing extra arguments for further repacking
 	open (ARGSFILE, ">$inputFilename-args.txt")
 		or die_msg("couldn't create file '$inputFilename-args.txt'!");
-	printf ARGSFILE ("--base %#.8x --pagesize %d --kernel_offset %#.8x --ramdisk_offset %#.8x --second_offset %#.8x --tags_offset %#.8x", $baseAddr, $pageSize, $kernelOffset, $ram1Offset, $ram2Offset, $tagsOffset) or die;
+	printf ARGSFILE ("--base %#.8x --pagesize %d --kernel_offset %#.8x --ramdisk_offset %#.8x --second_offset %#.8x --tags_offset %#.8x%s%s", $baseAddr, $pageSize, $kernelOffset, $ram1Offset, $ram2Offset, $tagsOffset, $bootName eq "" ? "" : " --board $bootName", $cmdLine eq "" ? "" : " --cmdline $cmdLine") or die;
+	close (ARGSFILE);
 	print "Extra arguments written to '$inputFilename-args.txt'\n";
-
-	if ($extract =~ /info/) {
-		print colored ("\nSuccessfully printed input file information.", 'green') . "\n";
-	}
 
 	if ($extract =~ /kernel/) {
 		my $kernel = substr($bootimg, $pageSize, $kernelSize);
