@@ -16,6 +16,7 @@
 #   - added support for new platforms - MT6595 (thanks to carliv@XDA) (29-12-2014)
 #   - minor code cleanup (29-12-2014)
 #   - make scripts more future-proof by supporting even more args (30-12-2014)
+#   - continue repacking even if there's no extra args file (01-01-2015)
 #
 
 use v5.14;
@@ -28,7 +29,7 @@ use File::Basename;
 
 my $dir = getcwd;
 
-my $version = "MTK-Tools by Bruno Martins\nMTK repack script (last update: 30-12-2014)\n";
+my $version = "MTK-Tools by Bruno Martins\nMTK repack script (last update: 01-01-2015)\n";
 my $usageMain = "repack-MTK.pl <COMMAND ...> <outfile>\n\nCOMMANDs are:\n\n";
 my $usageBootOpts =  "  -boot <kernel> <ramdisk-directory>\n    Repacks boot image\n\n  -recovery <kernel> <ramdisk-directory>\n    Repacks recovery image\n\n";
 my $usageLogoOpts =  "  -logo [--no_compression] <logo-directory>\n    Repacks logo image\n\n";
@@ -96,13 +97,17 @@ sub repack_boot {
 	# load extra args needed for creating the output file
 	my $argsfile = $kernel;
 	$argsfile =~ s/-kernel.img/-args.txt/;
-	my $extrargs;
-	open(ARGSFILE, $argsfile)
-		or die_msg("couldn't open extra args file '$argsfile'!");
-	while (<ARGSFILE>) {
-		chomp ($extrargs .= $_);
+	my $extrargs = "";
+	if (-e $argsfile) {
+		open(ARGSFILE, $argsfile)
+			or die_msg("couldn't open extra args file '$argsfile'!");
+		while (<ARGSFILE>) {
+			chomp ($extrargs .= $_);
+		}
+		close (ARGSFILE);
+	} else {
+		print "\nExtra arguments file not found ($type image will be repacked using default base address, kernel and ramdisk offsets)\n";
 	}
-	close (ARGSFILE);
 
 	# create the output file
 	my $tool = "mkbootimg" . (($^O eq "cygwin") ? ".exe" : (($^O eq "darwin") ? ".osx" : ""));
