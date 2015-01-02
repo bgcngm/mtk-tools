@@ -18,6 +18,7 @@
 #   - make scripts more future-proof by supporting even more args (30-12-2014)
 #   - continue repacking even if there's no extra args file (01-01-2015)
 #   - more verbose output when repacking boot and recovery images (02-01-2015)
+#   - added new cmdline option for eventual debugging (02-01-2015)
 #
 
 use v5.14;
@@ -32,7 +33,7 @@ my $dir = getcwd;
 
 my $version = "MTK-Tools by Bruno Martins\nMTK repack script (last update: 02-01-2015)\n";
 my $usageMain = "repack-MTK.pl <COMMAND ...> <outfile>\n\nCOMMANDs are:\n\n";
-my $usageBootOpts =  "  -boot <kernel> <ramdisk-directory>\n    Repacks boot image\n\n  -recovery <kernel> <ramdisk-directory>\n    Repacks recovery image\n\n";
+my $usageBootOpts =  "  -boot [--more_verbose] <kernel> <ramdisk-directory>\n    Repacks boot image\n\n  -recovery [--more_verbose] <kernel> <ramdisk-directory>\n    Repacks recovery image\n\n";
 my $usageLogoOpts =  "  -logo [--no_compression] <logo-directory>\n    Repacks logo image\n\n";
 my $usage = $usageMain . $usageBootOpts . $usageLogoOpts;
 
@@ -40,7 +41,12 @@ print colored ("$version", 'bold blue') . "\n";
 die "Usage: $usage" unless $ARGV[0] && $ARGV[1] && $ARGV[2];
 
 if ($ARGV[0] eq "-boot" || $ARGV[0] eq "-recovery") {
-	die "Usage: $usage" unless $ARGV[3] && !$ARGV[4];
+	if ($ARGV[1] eq "--more_verbose") {
+		die "Usage: $usage" unless $ARGV[3] && $ARGV[4] && !$ARGV[5];
+	} else {
+		die "Usage: $usage" unless $ARGV[3] && !$ARGV[4];
+		splice (@ARGV, 1, 0, "--normal"); 
+	}
 	repack_boot();
 } elsif ($ARGV[0] eq "-logo") {
 	if ($ARGV[1] eq "--no_compression") {
@@ -56,7 +62,7 @@ if ($ARGV[0] eq "-boot" || $ARGV[0] eq "-recovery") {
 }
 
 sub repack_boot {
-	my ($type, $kernel, $ramdiskdir, $outfile) = @ARGV;
+	my ($type, $verbose, $kernel, $ramdiskdir, $outfile) = @ARGV;
 	$type =~ s/^-//;
 	$ramdiskdir =~ s/\/$//;
 	my $ramdiskfile = "ramdisk-repack.cpio.gz";
@@ -134,6 +140,7 @@ sub repack_boot {
 	my $tool = "mkbootimg" . (($^O eq "cygwin") ? ".exe" : (($^O eq "darwin") ? ".osx" : ""));
 	die_msg("couldn't execute '$tool' binary!\nCheck if file exists or its permissions.")
 		unless (-x "$Bin/$tool");
+	print colored ("\nCommand line arguments (mkbootimg): --kernel $kernel --ramdisk temp-$ramdiskfile @extrargs -o $outfile", 'yellow') . "\n" unless ($verbose =~ /normal/);
 	system ("$Bin/$tool --kernel $kernel --ramdisk temp-$ramdiskfile @extrargs -o $outfile");
 
 	# cleanup
