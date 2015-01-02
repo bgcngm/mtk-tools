@@ -77,16 +77,33 @@ Input file information (example):
 	
 	COMMANDs are:
 	
-	  -boot <kernel> <ramdisk-directory>
+	  -boot [--more_verbose] <kernel> <ramdisk-directory>
 	    Repacks boot image
 	
-	  -recovery <kernel> <ramdisk-directory>
+	  -recovery [--more_verbose] <kernel> <ramdisk-directory>
 	    Repacks recovery image
 	
 	  -logo [--no_compression] <logo-directory>
 	    Repacks logo image
 
-- Note: for the new platforms requirements, repack script now requires the extra file with arguments created when unpacking.
+- Note: for the new platforms requirements, repack script now takes into account the file (created when unpacking) containing extra arguments. More information about the built image is now also displayed (example shown bellow).
+```
+Build information (example):
+
+ Base address and offsets:
+
+  Base address:                 0x10000000
+  Kernel offset:                0x00008000
+  Ramdisk offset:               0x01000000
+  Second stage offset:          0x00f00000
+  Tags offset:                  0x00000100
+
+ Other:
+
+  Page size (bytes):            2048
+  ASCIIZ product name:          ''
+  Command line:                 ''
+```
 
 #### Credits:
 
