@@ -137,7 +137,7 @@ sub unpack_boot {
 	# create file containing extra arguments for further repacking
 	open (ARGSFILE, ">$inputFilename-args.txt")
 		or die_msg("couldn't create file '$inputFilename-args.txt'!");
-	printf ARGSFILE ("--base %#.8x --pagesize %d --kernel_offset %#.8x --ramdisk_offset %#.8x --second_offset %#.8x --tags_offset %#.8x%s%s", $baseAddr, $pageSize, $kernelOffset, $ram1Offset, $ram2Offset, $tagsOffset, $bootName eq "" ? "" : " --board $bootName", $cmdLine eq "" ? "" : " --cmdline $cmdLine") or die;
+	printf ARGSFILE ("--base %#.8x\n--pagesize %d\n--kernel_offset %#.8x\n--ramdisk_offset %#.8x\n--second_offset %#.8x\n--tags_offset %#.8x%s%s", $baseAddr, $pageSize, $kernelOffset, $ram1Offset, $ram2Offset, $tagsOffset, $bootName eq "" ? "" : "\n--board $bootName", $cmdLine eq "" ? "" : "\n--cmdline $cmdLine") or die;
 	close (ARGSFILE);
 	print "Extra arguments written to '$inputFilename-args.txt'\n";
 

@@ -17,6 +17,7 @@
 #   - minor code cleanup (29-12-2014)
 #   - make scripts more future-proof by supporting even more args (30-12-2014)
 #   - continue repacking even if there's no extra args file (01-01-2015)
+#   - more verbose output when repacking boot and recovery images (02-01-2015)
 #
 
 use v5.14;
@@ -29,7 +30,7 @@ use File::Basename;
 
 my $dir = getcwd;
 
-my $version = "MTK-Tools by Bruno Martins\nMTK repack script (last update: 01-01-2015)\n";
+my $version = "MTK-Tools by Bruno Martins\nMTK repack script (last update: 02-01-2015)\n";
 my $usageMain = "repack-MTK.pl <COMMAND ...> <outfile>\n\nCOMMANDs are:\n\n";
 my $usageBootOpts =  "  -boot <kernel> <ramdisk-directory>\n    Repacks boot image\n\n  -recovery <kernel> <ramdisk-directory>\n    Repacks recovery image\n\n";
 my $usageLogoOpts =  "  -logo [--no_compression] <logo-directory>\n    Repacks logo image\n\n";
@@ -60,7 +61,8 @@ sub repack_boot {
 	$ramdiskdir =~ s/\/$//;
 	my $ramdiskfile = "ramdisk-repack.cpio.gz";
 	my $signature = ($type eq "boot" ? "ROOTFS" : "RECOVERY");
-	
+	my %args = (base => "0x10000000", kernel_offset => "0x00008000", ramdisk_offset => "0x01000000", second_offset => "0x00f00000", tags_offset => "0x00000100", pagesize => 2048, board => "", cmdline => "");
+
 	die_msg("kernel file '$kernel' not found!") unless (-e $kernel);
 	chdir $ramdiskdir or die_msg("directory '$ramdiskdir' not found!");
 
@@ -97,23 +99,42 @@ sub repack_boot {
 	# load extra args needed for creating the output file
 	my $argsfile = $kernel;
 	$argsfile =~ s/-kernel.img/-args.txt/;
-	my $extrargs = "";
+	my @extrargs;
 	if (-e $argsfile) {
 		open(ARGSFILE, $argsfile)
 			or die_msg("couldn't open extra args file '$argsfile'!");
 		while (<ARGSFILE>) {
-			chomp ($extrargs .= $_);
+			if ($_ =~ /^\--(\w+) (.+)$/) {
+				if (exists $args{$1}) {
+					push (@extrargs, $_);
+					$args{$1} = $2;
+				}
+			}
 		}
 		close (ARGSFILE);
+		chomp (@extrargs);
 	} else {
-		print "\nExtra arguments file not found ($type image will be repacked using default base address, kernel and ramdisk offsets)\n";
+		print colored ("\nWarning: file containing extra arguments was not found! The $type image will be repacked using default base address, kernel and ramdisk offsets (as shown bellow).", 'yellow') . "\n";
 	}
+
+	# print build information
+	print colored ("\nBuild information:\n", 'cyan') . "\n";
+	print colored (" Base address and offsets:\n", 'cyan') . "\n";
+	printf ("  Base address:\t\t\t%s\n", $args{"base"});
+	printf ("  Kernel offset:\t\t%s\n", $args{"kernel_offset"});
+	printf ("  Ramdisk offset:\t\t%s\n", $args{"ramdisk_offset"});
+	printf ("  Second stage offset:\t\t%s\n", $args{"second_offset"});
+	printf ("  Tags offset:\t\t\t%s\n\n", $args{"tags_offset"});
+	print colored (" Other:\n", 'cyan') . "\n";
+	printf ("  Page size (bytes):\t\t%s\n", $args{"pagesize"});
+	printf ("  ASCIIZ product name:\t\t'%s'\n", $args{"board"});
+	printf ("  Command line:\t\t\t'%s'\n", $args{"cmdline"});
 
 	# create the output file
 	my $tool = "mkbootimg" . (($^O eq "cygwin") ? ".exe" : (($^O eq "darwin") ? ".osx" : ""));
 	die_msg("couldn't execute '$tool' binary!\nCheck if file exists or its permissions.")
 		unless (-x "$Bin/$tool");
-	system ("$Bin/$tool --kernel $kernel --ramdisk temp-$ramdiskfile $extrargs -o $outfile");
+	system ("$Bin/$tool --kernel $kernel --ramdisk temp-$ramdiskfile @extrargs -o $outfile");
 
 	# cleanup
 	unlink ($ramdiskfile) or die $!;
