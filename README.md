@@ -16,23 +16,28 @@ Scripts were first based on the ones available on [Android-DLS WiKi](http://andr
 #### Unpack script usage:
 
 	Usage: unpack-MTK.pl <infile> [COMMAND ...]
-	  Unpacks boot, recovery or logo image
+	  Unpacks MediaTek boot, recovery or logo images
 	
-	Optional COMMANDs are:
+	Optional COMMANDs for boot or recovery images are:
 	
 	  -info_only
-	    Display boot or recovery image information only
+	    Display file information only
 	     (useful to check image information without unpacking)
 	
-	  -kernel_only
-	    Extract kernel only from boot or recovery image
+	  -kernel_only [--debug]
+	    Extract kernel only
 	
-	  -ramdisk_only
-	    Extract ramdisk only from boot or recovery image
+	  -ramdisk_only [--debug]
+	    Extract ramdisk only
+	
+	    (optional argument '--debug' can additionally be used to provide useful
+	     information for debugging purposes, even while unpacking both kernel
+	     and ramdisk)
+	
+	Optional COMMANDs for logo images are:
 	
 	  -force_logo_res <width> <height>
-	    Forces logo image file to be unpacked by specifying image resolution,
-	    which must be entered in pixels
+	    Forces file to be unpacked by specifying image resolution (in pixels)
 	     (only useful when no zlib compressed images are found)
 	
 	  -invert_logo_res
@@ -74,17 +79,26 @@ Input file information (example):
 #### Repack script usage:
 
 	Usage: repack-MTK.pl <COMMAND ...> <outfile>
+	  Repacks MediaTek boot, recovery or logo images
 	
-	COMMANDs are:
+	COMMANDs for boot or recovery images are:
 	
-	  -boot [--more_verbose] <kernel> <ramdisk-directory>
+	  -boot [--debug] <kernel> <ramdisk-directory>
 	    Repacks boot image
 	
-	  -recovery [--more_verbose] <kernel> <ramdisk-directory>
+	  -recovery [--debug] <kernel> <ramdisk-directory>
 	    Repacks recovery image
+	
+	    (optional argument '--debug' can additionally be used to provide useful
+	     information for debugging purposes, while repacking)
+	
+	COMMANDs for logo images are:
 	
 	  -logo [--no_compression] <logo-directory>
 	    Repacks logo image
+	
+	    (optional argument '--no_compression' can be used to repack logo images
+	     without compression)
 
 - Note: for the new platforms requirements, repack script now takes into account the file (created when unpacking) containing extra arguments. More information about the built image is now also displayed (example shown bellow).
 ```

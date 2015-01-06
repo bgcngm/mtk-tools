@@ -18,7 +18,7 @@
 #   - make scripts more future-proof by supporting even more args (30-12-2014)
 #   - continue repacking even if there's no extra args file (01-01-2015)
 #   - more verbose output when repacking boot and recovery images (02-01-2015)
-#   - added new cmdline option for eventual debugging (02-01-2015)
+#   - added new cmdline option for debugging purposes (06-01-2015)
 #
 
 use v5.14;
@@ -28,20 +28,21 @@ use Compress::Zlib;
 use Term::ANSIColor;
 use FindBin qw($Bin);
 use File::Basename;
+use Text::Wrap;
 
 my $dir = getcwd;
 
-my $version = "MTK-Tools by Bruno Martins\nMTK repack script (last update: 02-01-2015)\n";
-my $usageMain = "repack-MTK.pl <COMMAND ...> <outfile>\n\nCOMMANDs are:\n\n";
-my $usageBootOpts =  "  -boot [--more_verbose] <kernel> <ramdisk-directory>\n    Repacks boot image\n\n  -recovery [--more_verbose] <kernel> <ramdisk-directory>\n    Repacks recovery image\n\n";
-my $usageLogoOpts =  "  -logo [--no_compression] <logo-directory>\n    Repacks logo image\n\n";
+my $version = "MTK-Tools by Bruno Martins\nMTK repack script (last update: 06-01-2015)\n";
+my $usageMain = "repack-MTK.pl <COMMAND ...> <outfile>\n  Repacks MediaTek boot, recovery or logo images\n\n";
+my $usageBootOpts =  "COMMANDs for boot or recovery images are:\n\n  -boot [--debug] <kernel> <ramdisk-directory>\n    Repacks boot image\n\n  -recovery [--debug] <kernel> <ramdisk-directory>\n    Repacks recovery image\n\n" . wrap("    ","     ","(optional argument '--debug' can additionally be used to provide useful information for debugging purposes, while repacking)") . "\n\n";
+my $usageLogoOpts =  "COMMANDs for logo images are:\n\n  -logo [--no_compression] <logo-directory>\n    Repacks logo image\n\n" . wrap("    ","     ","(optional argument '--no_compression' can be used to repack logo images without compression)") . "\n\n";
 my $usage = $usageMain . $usageBootOpts . $usageLogoOpts;
 
 print colored ("$version", 'bold blue') . "\n";
 die "Usage: $usage" unless $ARGV[0] && $ARGV[1] && $ARGV[2];
 
 if ($ARGV[0] eq "-boot" || $ARGV[0] eq "-recovery") {
-	if ($ARGV[1] eq "--more_verbose") {
+	if ($ARGV[1] eq "--debug") {
 		die "Usage: $usage" unless $ARGV[3] && $ARGV[4] && !$ARGV[5];
 	} else {
 		die "Usage: $usage" unless $ARGV[3] && !$ARGV[4];
@@ -62,24 +63,28 @@ if ($ARGV[0] eq "-boot" || $ARGV[0] eq "-recovery") {
 }
 
 sub repack_boot {
-	my ($type, $verbose, $kernel, $ramdiskdir, $outfile) = @ARGV;
+	my ($type, $mode, $kernel, $ramdiskdir, $outfile) = @ARGV;
 	$type =~ s/^-//;
+	my $debug_mode = ($mode =~ /debug/ ? 1 : 0);
 	$ramdiskdir =~ s/\/$//;
-	my $ramdiskfile = "ramdisk-repack.cpio.gz";
+	my $ramdiskfile = "ramdisk-new.cpio.gz";
 	my $signature = ($type eq "boot" ? "ROOTFS" : "RECOVERY");
 	my %args = (base => "0x10000000", kernel_offset => "0x00008000", ramdisk_offset => "0x01000000", second_offset => "0x00f00000", tags_offset => "0x00000100", pagesize => 2048, board => "", cmdline => "");
 
 	die_msg("kernel file '$kernel' not found!") unless (-e $kernel);
-	chdir $ramdiskdir or die_msg("directory '$ramdiskdir' not found!");
+	die_msg("directory '$ramdiskdir' not found!") unless (-d $ramdiskdir);
 
 	foreach my $tool ("find", "cpio", "gzip") {
 		die_msg("'$tool' binary not found! Double check your environment setup.")
 			if system ("command -v $tool >/dev/null 2>&1");
 	}
-	print "Repacking $type image...\nRamdisk size: ";
-	system ("find . | cpio -o -H newc | gzip > $dir/$ramdiskfile");
-
-	chdir $dir or die "\n$ramdiskdir $!";;
+	print "Repacking $type image...\n";
+	if ($debug_mode) {
+		print colored ("\nRamdisk repack command:", 'yellow') . "\n";
+		print "'find $ramdiskdir/. | cpio -o -H newc | gzip > $ramdiskfile'\n\n";
+	}
+	print "Ramdisk size: ";
+	system ("find $ramdiskdir/. | cpio -o -H newc | gzip > $ramdiskfile");
 
 	open (RAMDISKFILE, $ramdiskfile)
 		or die_msg("couldn't open ramdisk file '$ramdiskfile'!");
@@ -96,8 +101,17 @@ sub repack_boot {
 	# attach the header to ramdisk
 	my $newramdisk = $header . $ramdisk;
 
+	if ($debug_mode) {
+		open (HEADERFILE, ">ramdisk-new.header")
+			or die_msg("couldn't create MTK header file 'ramdisk-new.header'!");
+		binmode (HEADERFILE);
+		print HEADERFILE $header or die;
+		close (HEADERFILE);
+	} elsif (-e "ramdisk-new.header") {
+		system ("rm ramdisk-new.header");
+	}
 	open (RAMDISKFILE, ">temp-$ramdiskfile")
-		or die_msg("couldn't create temporary ramdisk file 'temp-$ramdiskfile'!");
+		or die_msg("couldn't create repacked ramdisk file 'temp-$ramdiskfile'!");
 	binmode (RAMDISKFILE);
 	print RAMDISKFILE $newramdisk or die;
 	close (RAMDISKFILE);
@@ -123,28 +137,33 @@ sub repack_boot {
 		print colored ("\nWarning: file containing extra arguments was not found! The $type image will be repacked using default base address, kernel and ramdisk offsets (as shown bellow).", 'yellow') . "\n";
 	}
 
-	# print build information
-	print colored ("\nBuild information:\n", 'cyan') . "\n";
-	print colored (" Base address and offsets:\n", 'cyan') . "\n";
-	printf ("  Base address:\t\t\t%s\n", $args{"base"});
-	printf ("  Kernel offset:\t\t%s\n", $args{"kernel_offset"});
-	printf ("  Ramdisk offset:\t\t%s\n", $args{"ramdisk_offset"});
-	printf ("  Second stage offset:\t\t%s\n", $args{"second_offset"});
-	printf ("  Tags offset:\t\t\t%s\n\n", $args{"tags_offset"});
-	print colored (" Other:\n", 'cyan') . "\n";
-	printf ("  Page size (bytes):\t\t%s\n", $args{"pagesize"});
-	printf ("  ASCIIZ product name:\t\t'%s'\n", $args{"board"});
-	printf ("  Command line:\t\t\t'%s'\n", $args{"cmdline"});
+	# print build information (only in normal mode)
+	if (!$debug_mode) {
+		print colored ("\nBuild information:\n", 'cyan') . "\n";
+		print colored (" Base address and offsets:\n", 'cyan') . "\n";
+		printf ("  Base address:\t\t\t%s\n", $args{"base"});
+		printf ("  Kernel offset:\t\t%s\n", $args{"kernel_offset"});
+		printf ("  Ramdisk offset:\t\t%s\n", $args{"ramdisk_offset"});
+		printf ("  Second stage offset:\t\t%s\n", $args{"second_offset"});
+		printf ("  Tags offset:\t\t\t%s\n\n", $args{"tags_offset"});
+		print colored (" Other:\n", 'cyan') . "\n";
+		printf ("  Page size (bytes):\t\t%s\n", $args{"pagesize"});
+		printf ("  ASCIIZ product name:\t\t'%s'\n", $args{"board"});
+		printf ("  Command line:\t\t\t'%s'\n", $args{"cmdline"});
+	}
 
 	# create the output file
 	my $tool = "mkbootimg" . (($^O eq "cygwin") ? ".exe" : (($^O eq "darwin") ? ".osx" : ""));
 	die_msg("couldn't execute '$tool' binary!\nCheck if file exists or its permissions.")
 		unless (-x "$Bin/$tool");
-	print colored ("\nCommand line arguments (mkbootimg): --kernel $kernel --ramdisk temp-$ramdiskfile @extrargs -o $outfile", 'yellow') . "\n" unless ($verbose =~ /normal/);
+	if ($debug_mode) {
+		print colored ("\nBuild $type image command:", 'yellow') . "\n";
+		print "'$tool --kernel $kernel --ramdisk temp-$ramdiskfile @extrargs -o $outfile'\n";
+	}
 	system ("$Bin/$tool --kernel $kernel --ramdisk temp-$ramdiskfile @extrargs -o $outfile");
 
 	# cleanup
-	unlink ($ramdiskfile) or die $!;
+	unlink ($ramdiskfile) or die $! unless ($debug_mode);
 	system ("rm temp-$ramdiskfile");
 
 	if (-e $outfile) {
@@ -274,6 +293,6 @@ sub png_to_rgb565 {
 }
 
 sub die_msg {
-	die colored ("\nError: $_[0]", 'red') . "\n";
+	die colored ("\n" . wrap("","       ","Error: $_[0]"), 'red') . "\n";
 }
 
