@@ -87,11 +87,15 @@ if ((substr($input, 0, 4) eq "\x88\x16\x88\x58") & (substr($input, 8, 4) eq "LOG
 		die_msg("argument '$ARGV[1]' can't be used with boot or recovery images!")
 			unless ($ARGV[1] eq "-info_only" || $ARGV[1] eq "-kernel_only" || $ARGV[1] eq "-ramdisk_only" ||
 				$ARGV[1] eq "--debug");
-		$ARGV[1] =~ s/-//;
-		$ARGV[1] =~ s/_only//;
-		unpack_boot($input, $ARGV[2] ? $ARGV[1] : "kernel and ramdisk", $ARGV[2] ? $ARGV[2] : $ARGV[1]);
+		if ($ARGV[1] eq "--debug") {
+			unpack_boot($input, "kernel and ramdisk", $ARGV[1]);
+		} else {
+			$ARGV[1] =~ s/-//;
+			$ARGV[1] =~ s/_only//;
+			unpack_boot($input, $ARGV[1], $ARGV[2] ? $ARGV[2] : "--normal");
+		}
 	} else {
-		unpack_boot($input, "kernel and ramdisk", $ARGV[2]);
+		unpack_boot($input, "kernel and ramdisk", "--normal");
 	}
 } else {
 	die_msg("the input file does not appear to be supported or valid!");
