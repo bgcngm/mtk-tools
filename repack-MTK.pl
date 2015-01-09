@@ -72,7 +72,7 @@ sub repack_boot {
 	my %args = (base => "0x10000000", kernel_offset => "0x00008000", ramdisk_offset => "0x01000000", second_offset => "0x00f00000", tags_offset => "0x00000100", pagesize => 2048, board => "", cmdline => "");
 
 	die_msg("kernel file '$kernel' not found!") unless (-e $kernel);
-	die_msg("directory '$ramdiskdir' not found!") unless (-d $ramdiskdir);
+	chdir $ramdiskdir or die_msg("directory '$ramdiskdir' not found!");
 
 	foreach my $tool ("find", "cpio", "gzip") {
 		die_msg("'$tool' binary not found! Double check your environment setup.")
@@ -81,10 +81,12 @@ sub repack_boot {
 	print "Repacking $type image...\n";
 	if ($debug_mode) {
 		print colored ("\nRamdisk repack command:", 'yellow') . "\n";
-		print "'find $ramdiskdir/. | cpio -o -H newc | gzip > $ramdiskfile'\n\n";
+		print "'find . | cpio -o -H newc | gzip > $dir/$ramdiskfile'\n\n";
 	}
 	print "Ramdisk size: ";
-	system ("find $ramdiskdir/. | cpio -o -H newc | gzip > $ramdiskfile");
+	system ("find . | cpio -o -H newc | gzip > $dir/$ramdiskfile");
+
+	chdir $dir or die "\n$ramdiskdir $!";;
 
 	open (RAMDISKFILE, $ramdiskfile)
 		or die_msg("couldn't open ramdisk file '$ramdiskfile'!");
