@@ -179,8 +179,13 @@ sub repack_logo {
 	my (@raw_addr, @raw, @zlib_raw);
 	$logodir =~ s/\/$//;
 
+    # Determine whether the original logo images used bgra8888 or rgb565.
+    # The name of the uncompressed folder is used for doing it.
+    my $platform = ($logodir =~ m/bgra8888/);
+    my $format = ($platform) ? "bgra8888" : "rgb565" ;
+
 	my $compression = ($type eq "--no_compression" ? 0 : 1);
-	my $filename = $logodir =~ s/-unpacked$//r;
+	my $filename = $logodir =~ s/-$format-unpacked$//r;
 
 	chdir $logodir or die_msg("directory '$logodir' not found!");
 
@@ -195,15 +200,16 @@ sub repack_logo {
 				if system ("command -v convert >/dev/null 2>&1");
 
 			print "Converting and packing '$inputfile'\n";
-			$raw[$i] = png_to_rgb565($inputfile);
-		} elsif ($extension eq ".rgb565") {
-			open (RGB565FILE, "$inputfile")
+			$raw[$i] = ($platform) ? png_to_bgra8888($inputfile) : png_to_rgb565($inputfile) ;
+
+		} elsif (($extension eq ".rgb565") || ($extension eq ".bgra8888")) {
+			open (IMAGEFILE, "$inputfile")
 				or die_msg("couldn't open image file '$inputfile'!");
 			my $input;
-				while (<RGB565FILE>) {
+				while (<IMAGEFILE>) {
 				$input .= $_;
 			}
-			close (RGB565FILE);
+			close (IMAGEFILE);
 			print "Packing '$inputfile'\n";
 			$raw[$i] = $input;
 		} else {
@@ -211,13 +217,13 @@ sub repack_logo {
 		}
 
 		if ($compression) {
-			# deflate all rgb565 images (compress zlib rfc1950)
+			# deflate all images (compress zlib rfc1950)
 			$zlib_raw[$i] = compress($raw[$i],Z_BEST_COMPRESSION);
 		}
 
 		$i++;
 	}
-	die_msg("couldn't find any .png or .rgb565 file under the specified directory '$logodir'!")
+	die_msg("couldn't find any .png, .bgra8888 or .rgb565 file under the specified directory '$logodir'!")
 		unless $i > 0;
 
 	chdir $dir or die "\n$logodir $!";;
@@ -227,7 +233,7 @@ sub repack_logo {
 
 	if ($compression) {
 		$logo_length = (4 + 4 + $num_blocks * 4);
-		# calculate the start address of each rgb565 image and the new file size
+		# calculate the start address of each image and the new file size
 		for my $i (0 .. $num_blocks - 1) {
 			$raw_addr[$i] = $logo_length;
 			$logo_length += length($zlib_raw[$i]);
@@ -248,8 +254,9 @@ sub repack_logo {
 		}
 		$logo_length = length($logobin);
 	}
-	# generate logo header according to the logo size
-	my $logo_header = gen_header("LOGO", $logo_length);
+	# generate logo header according to the logo size and platform
+    my $logo_header_type = ($platform) ? "logo" : "LOGO" ;
+	my $logo_header = gen_header($logo_header_type, $logo_length);
 
 	$logobin = $logo_header . $logobin;
 
@@ -292,6 +299,30 @@ sub png_to_rgb565 {
 	system ("rm $filename.raw");
 
 	return $rgb565_data;
+}
+
+sub png_to_bgra8888 {
+	my $filename = $_[0] =~ s/.png$//r;
+	my ($bgra8888_data, $data, @encoded);
+
+	# convert png into raw bgra8888
+	system ("convert -depth 8 $filename.png bgra:$filename.raw");
+
+	# copy it
+	open (RAWFILE, "$filename.raw")
+		or die_msg("couldn't open temporary image file '$filename.raw'!");
+	binmode (RAWFILE);
+
+    while (<RAWFILE>) {
+	    $bgra8888_data .= $_;
+    }
+
+    close (RAWFILE);
+
+	# cleanup
+	system ("rm $filename.raw");
+
+	return $bgra8888_data;
 }
 
 sub die_msg {

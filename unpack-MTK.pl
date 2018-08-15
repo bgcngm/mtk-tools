@@ -69,7 +69,13 @@ while (<INPUTFILE>) {
 }
 close (INPUTFILE);
 
-if ((substr($input, 0, 4) eq "\x88\x16\x88\x58") & (substr($input, 8, 4) eq "LOGO")) {
+my $logo_signature;
+
+if (substr($input, 0, 4) eq "\x88\x16\x88\x58") {
+    # check for the platform version
+    $logo_signature = substr($input, 8, 4);
+    die_msg("No valid logo signature found!")
+        unless ($logo_signature eq "LOGO" || $logo_signature eq "logo");
 	# if the input file contains the logo signature, try to unpack it
 	print "Valid logo signature found...\n";
 	if ($ARGV[1]) {
@@ -245,11 +251,12 @@ sub unpack_logo {
 	# (it may happen if logo image was created with a backup tool and contains trailing zeros)
 	my $sizelogobin = -s $inputfile;
 	if ($logo_length != $sizelogobin - 512) {
-		print colored ("Warning: unexpected logo image file size! Trying to unpack it anyway...", 'yellow') . "\n";
+		print colored ("Warning: unexpected logo image file size! Logo file may contain trailing zeros.", 'yellow') . "\n";
+        print colored ("Trying to unpack it anyway...", 'yellow') . "\n";
 	}
 
 	# chop the header and any eventual garbage found at the EOF
-	# (take only the important logo part which contains packed rgb565 images)
+	# (take only the important logo part which contains packed images)
 	my $logo = substr($logobin, 512, $logo_length);
 
 	# check if logo length is really consistent
@@ -257,24 +264,30 @@ sub unpack_logo {
 		die_msg("the specified logo image file seems to be corrupted!");
 	}
 
-	if (-e "$inputFilename-unpacked") {
-		rmtree "$inputFilename-unpacked";
-		print "\nRemoved old unpacked logo directory '$inputFilename-unpacked'";
+    # old platforms used rgb565 while new use bgra8888
+    my $format = ($logo_signature eq "logo") ? "bgra8888" : "rgb565" ;
+
+    # bytes needed for each pixel of the image.
+    my $bytes_per_pixel = ($logo_signature eq "logo") ? 4 : 2 ; 
+
+	if (-e "$inputFilename-$format-unpacked") {
+		rmtree "$inputFilename-$format-unpacked";
+		print "\nRemoved old unpacked logo directory '$inputFilename-$format-unpacked'";
 	}
 
-	mkdir "$inputFilename-unpacked" or die;
-	chdir "$inputFilename-unpacked" or die;
-	print "\nExtracting images to directory '$inputFilename-unpacked'\n";
+	mkdir "$inputFilename-$format-unpacked" or die;
+	chdir "$inputFilename-$format-unpacked" or die;
+	print "\nExtracting images to directory '$inputFilename-$format-unpacked'\n";
 
-	# get the number of packed rgb565 images
+	# get the number of packed images
 	my $num_blocks = unpack('V', $logo);
 
 	if (!$num_blocks) {
-		die_msg("no zlib packed rgb565 images were found inside logo file!" . 
+		die_msg("no zlib packed images were found inside logo file!" . 
 			"\nDouble check script usage and try using '-force_logo_res' argument.") unless ($switch eq "force_logo_res");
 
 		# if no compressed files are found, try to unpack logo based on specified image resolution
-		my $image_file_size = ($ARGV[2] * $ARGV[3] * 2);
+		my $image_file_size = ($ARGV[2] * $ARGV[3] * $bytes_per_pixel);
 		$num_blocks = int ($logo_length / $image_file_size);
 
 		print "\nNumber of uncompressed images found (based on specified resolution): $num_blocks\n";
@@ -282,30 +295,34 @@ sub unpack_logo {
 		for my $i (0 .. $num_blocks - 1) {
 			my $filename = sprintf ("%s-img[%02d]", $inputFilename, $i);
 
-			open (RGB565FILE, ">$filename.rgb565")
-				or die_msg("couldn't create image file '$filename.rgb565'!");
-			binmode (RGB565FILE);
-			print RGB565FILE substr($logo, $i * $image_file_size, $image_file_size) or die;
-			close (RGB565FILE);
+			open (IMAGEFILE, ">$filename.$format")
+				or die_msg("couldn't create image file '$filename.$format'!");
+			binmode (IMAGEFILE);
+			print IMAGEFILE substr($logo, $i * $image_file_size, $image_file_size) or die;
+			close (IMAGEFILE);
 			
 			if ($ImageMagick_installed) {
-				# convert rgb565 into png
-				rgb565_to_png($filename, $ARGV[2], $ARGV[3]);
+				# convert bgra8888 or rgb565 into png
+                if ($bytes_per_pixel eq 4) {
+                    bgra8888_to_png($filename, $ARGV[2], $ARGV[3]);
+                } else {
+                    rgb565_to_png($filename, $ARGV[2], $ARGV[3]);
+                }
 
 				print "Image #$i written to '$filename.png'\n";
 			} else {
-				print "Image #$i written to '$filename.rgb565'\n";
+				print "Image #$i written to '$filename.$format'\n";
 			}
 		}
 	} else {
 		my $j = 0;
 		my (@raw_addr, @zlib_raw) = ();
 		print "\nNumber of images found: $num_blocks\n";
-		# get the starting address of each rgb565 image
+		# get the starting address of each compressed image
 		for my $i (0 .. $num_blocks - 1) {
 			$raw_addr[$i] = unpack('L', substr($logo, 8+$i*4, 4));
 		}
-		# extract rgb565 images (uncompress zlib rfc1950)
+		# extract images (uncompress zlib rfc1950)
 		for my $i (0 .. $num_blocks - 1) {
 			if ($i < $num_blocks - 1) {
 				$zlib_raw[$i] = substr($logo, $raw_addr[$i], $raw_addr[$i+1]-$raw_addr[$i]);
@@ -314,37 +331,41 @@ sub unpack_logo {
 			}
 			my $filename = sprintf ("%s-img[%02d]", $inputFilename, $i);
 
-			open (RGB565FILE, ">$filename.rgb565")
-				or die_msg("couldn't create image file '$filename.rgb565'!");
-			binmode (RGB565FILE);
-			print RGB565FILE uncompress($zlib_raw[$i]) or die;
-			close (RGB565FILE);
+			open (IMAGEFILE, ">$filename.$format")
+				or die_msg("couldn't create image file '$filename.$format'!");
+			binmode (IMAGEFILE);
+			print IMAGEFILE uncompress($zlib_raw[$i]) or die;
+			close (IMAGEFILE);
 
 			# calculate image resolution
-			my $raw_num_pixels = length (uncompress($zlib_raw[$i])) / 2;
+			my $raw_num_pixels = length (uncompress($zlib_raw[$i])) / $bytes_per_pixel;
 			while ($j <= $#resolution) {
 				last if ($raw_num_pixels == ($resolution[$j][0] * $resolution[$j][1]));
 				$j++;
 			}
 			if ($j <= $#resolution) {
 				if ($ImageMagick_installed) {
-					# convert rgb565 into png
-					rgb565_to_png($filename, $resolution[$j][0], $resolution[$j][1]);
-					
+					# convert bgra8888 or rgb565 into png
+                    if ($bytes_per_pixel eq 4) {
+                        bgra8888_to_png($filename, $resolution[$j][0], $resolution[$j][1]);
+                    } else {
+                        rgb565_to_png($filename, $resolution[$j][0], $resolution[$j][1]);
+                    }
 					print "Image #$i written to '$filename.png'\n";
 				} else {
-					print "Image #$i written to '$filename.rgb565'\n";
+					print "Image #$i written to '$filename.$format'\n";
 				}
 				print "  Resolution (width x height): $resolution[$j][0] x $resolution[$j][1] $resolution[$j][2]\n";
 			} else {
-				print "Image #$i written to '$filename.rgb565'\n";
-				print "  Resolution: unknown\n";
+				print "Image #$i written to '$filename.$format'\n";
+				print "  Resolution: unknown. Number of pixels $raw_num_pixels. You can try adding new possible resolutions to logo_res.txt file and running the script again\n";
 			}
 			$j = 0;
 		}
 	}
 
-	print colored ("\nSuccessfully extracted all images.", 'green') . "\n";
+	print colored ("\nSuccessfully extracted all images.", 'green');
+    print colored ("\nNow you can edit them, but plese do not change the name of the uncompressed folder or of any of the image files contained in it. Doing so will make the repack script FAIL. ", 'red') . "\n";
 }
 
 sub rgb565_to_png {
@@ -353,17 +374,17 @@ sub rgb565_to_png {
 	my $img_resolution = $img_width . "x" . $img_heigth;
 	
 	# convert rgb565 into raw rgb (rgb888)
-	open (RGB565FILE, "$filename.rgb565")
+	open (IMAGEFILE, "$filename.rgb565")
 		or die_msg("couldn't open image file '$filename.rgb565'!");
-	binmode (RGB565FILE);
-	while (read (RGB565FILE, $data, 2) != 0) {
+	binmode (IMAGEFILE);
+	while (read (IMAGEFILE, $data, 2) != 0) {
 		$encoded = unpack('S', $data);
 		$raw_data .= pack('C C C',
 			(($encoded >> 11) & 0x1F) * 255 / 31,
 			(($encoded >> 5) & 0x3F) * 255 / 63,
 			($encoded & 0x1F) * 255 / 31);
 	}
-	close (RGB565FILE);
+	close (IMAGEFILE);
 
 	open (RAWFILE, ">$filename.raw")
 		or die_msg("couldn't create raw image file '$filename.raw'!");
@@ -377,6 +398,20 @@ sub rgb565_to_png {
 	# cleanup
 	if (-e "$filename.png") {
 		system ("rm $filename.rgb565 | rm $filename.raw");
+	}
+}
+
+sub bgra8888_to_png {
+	my ($filename, $img_width, $img_heigth) = @_;
+	my ($raw_data, $data, $encoded);
+	my $img_resolution = $img_width . "x" . $img_heigth;
+
+	# convert raw bgra (bgra8888) into png
+	system ("convert -depth 8 -size $img_resolution bgra:$filename.bgra8888 $filename.png");
+
+	# cleanup
+	if (-e "$filename.png") {
+		system ("rm $filename.bgra8888");
 	}
 }
 
